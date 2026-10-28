@@ -1,7 +1,9 @@
 {
   // Esempio innocuo: crea cartelle e stampa il nome di ogni file. Provarlo prima con --dry-run.
   "variables": {
-    "RootDir": "C:\\terraform-sample"
+    "RootDir": "C:\\terraform-sample",
+    "SourceComputerName": "SERVER-SORGENTE",
+    "BatchPassword": "DA-SOSTITUIRE"
   },
   "pipeline": [
     {
@@ -29,6 +31,28 @@
         },
         "command": "cmd.exe",
         "arguments": "/c echo {FileName} in {Directory}"
+      }
+    },
+    {
+      // Disabilitato: richiede server/account reali e privilegi amministrativi locali.
+      "id": "step_03_services",
+      "type": "CREATE-SERVICES",
+      "enabled": false,
+      "config": {
+        "sourceComputerName": "{SourceComputerName}",
+        "filter": { "accountPattern": "*svc_*" },
+        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
+      }
+    },
+    {
+      // Disabilitato: sovrascrive i task selezionati, mantenendoli disabilitati.
+      "id": "step_04_tasks",
+      "type": "CREATE-TASKS",
+      "enabled": false,
+      "config": {
+        "sourceComputerName": "{SourceComputerName}",
+        "filter": { "names": ["\\Batch\\Import"] },
+        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
       }
     }
   ]

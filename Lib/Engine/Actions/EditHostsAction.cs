@@ -28,9 +28,12 @@ public sealed class EditHostsAction : IAction
     public string ActionType => "HOSTS";
     public string ActionDescription => "Allinea le mappature hostname/IP nel file hosts locale.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra configurazione delle entry e vincoli di lettura e scrittura del file hosts.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]HOSTS[/] - Allinea le mappature nel file hosts, senza duplicare gli host.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "hosts", // Obbligatorio e univoco.
                     "type": "HOSTS", // Obbligatorio.
@@ -46,19 +49,36 @@ public sealed class EditHostsAction : IAction
                         ]
                     }
                 }
-                {SourceServer} va definita in variables. path, se specificato, deve essere completo ed esistere.
-                Conserva gli altri alias e scrive solo se necessario. Per il file di sistema servono privilegi adeguati.
-                Dry-run: legge il file e mostra le modifiche senza scrivere.
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
+        ConsolePlus.WriteList([
+            "[Cyan]entries[/]: [Yellow]obbligatorio[/], almeno una voce con [Cyan]ip[/] IPv4/IPv6 valido e [Cyan]host[/] univoco, senza spazi o #.",
+            "[Cyan]path[/]: opzionale, [Green]default hosts di sistema[/]; se specificato deve essere completo ed esistere.",
+            "[Magenta]{SourceServer}[/]: va definita nelle [Cyan]variables[/] globali della pipeline.",
+            "[Green]Conserva[/] gli altri alias, i commenti e la codifica; scrive solo se necessario.",
+            "[Yellow]Permessi[/]: per modificare il file di sistema servono privilegi adeguati.",
+            "[Cyan]Dry-run[/]: legge il file e mostra le modifiche, [Green]senza scrivere[/]."
+        ]);
+    }
 
-    public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    /// <summary>Valida voci e percorso senza leggere o scrivere hosts.</summary>
+    public void Validate(JsonElement config) => ReadConfig(config);
+
+    /// <summary>Valida entry e percorso senza leggere il file hosts.</summary>
+    private static (string Path, List<HostEntry> Entries) ReadConfig(JsonElement config)
     {
         var settings = ActionConfig.Read<Config>(config);
         var path = settings.HostsPath is null
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts")
             : ActionConfig.FullPath(settings.HostsPath, "path");
         var entries = ParseEntries(settings.Entries);
+        return (path, entries);
+    }
 
+    public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    {
+        var (path, entries) = ReadConfig(config);
         if (!File.Exists(path))
         {
             return new ActionResult(false, $"file hosts non trovato: {path}");

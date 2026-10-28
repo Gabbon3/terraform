@@ -108,6 +108,7 @@ public sealed class RobocopyActionTests : IDisposable
     [InlineData(@"E:\", false, "/MIR")]
     [InlineData(@"E:\", false, "/PURGE")]
     [InlineData(@"E:\", false, "/move /B")]
+    [InlineData(@"E:\", false, "\"/MIR\"")]
     public void Refuses_destructive_operations_on_a_drive_or_share_root(string destination, bool? mirror, string? extra)
     {
         var ex = Assert.Throws<ActionConfigException>(() => Build(Config(destination: destination, mirror: mirror, extra: extra)));
@@ -134,6 +135,40 @@ public sealed class RobocopyActionTests : IDisposable
         Assert.Throws<ActionConfigException>(() => Build(Config(threads: 129)));
         Assert.Throws<ActionConfigException>(() => Build(Config(retries: -1)));
         Assert.Throws<ActionConfigException>(() => Build(Config(files: ["a\"b"])));
+    }
+
+    [Theory]
+    [InlineData(@"D:\data", @"D:\data\backup")]
+    [InlineData(@"D:\data\backup", @"d:\DATA")]
+    [InlineData(@"D:\data\", @"d:\DATA\sub\..\backup")]
+    [InlineData(@"D:\", @"D:\backup")]
+    [InlineData(@"\\server\share", @"\\SERVER\SHARE\backup")]
+    [InlineData(@"\\server\share\backup", @"\\SERVER\SHARE\")]
+    public void Refuses_overlapping_paths_before_any_filesystem_query(string source, string destination)
+    {
+        var config = Config(source, destination, mirror: false);
+        Assert.Throws<ActionConfigException>(() => RobocopyAction.Build(config, false,
+            _ => throw new InvalidOperationException("non deve interrogare il disco"),
+            _ => throw new InvalidOperationException("non deve interrogare il disco")));
+    }
+
+    [Theory]
+    [InlineData(@"D:\data", @"D:\database")]
+    [InlineData(@"D:\data\src", @"D:\data\dst")]
+    [InlineData(@"\\server\share", @"\\server\share2")]
+    public void Accepts_siblings_with_common_prefixes(string source, string destination) =>
+        Build(Config(source, destination, mirror: false));
+
+    [Theory]
+    [InlineData(@"D:\", "/MOV")]
+    [InlineData(@"D:\", "/move /B")]
+    [InlineData(@"D:\", "\"/MOV\"")]
+    [InlineData(@"\\server\share", "/MOV")]
+    [InlineData(@"\\server\share\", "/MOVE")]
+    public void Refuses_moves_from_a_drive_or_share_root_in_either_argument_field(string source, string move)
+    {
+        Assert.Throws<ActionConfigException>(() => Build(Config(source: source, mirror: false, extra: move)));
+        Assert.Throws<ActionConfigException>(() => Build(Config(source: source, mirror: false, copyOptions: move)));
     }
 
     [Theory]

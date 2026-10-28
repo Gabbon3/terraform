@@ -16,6 +16,10 @@ public sealed class Logger
 {
     private readonly string _logFile;
     private readonly object _lockObject = new();
+    private int _warningCount;
+
+    /// <summary>Numero di Warning emessi da questo logger, leggibile anche dai worker paralleli.</summary>
+    public int WarningCount => Volatile.Read(ref _warningCount);
     
     /// <summary>
     /// Crea un nuovo logger con directory e nome file personalizzati
@@ -51,6 +55,8 @@ public sealed class Logger
     /// <param name="isParallel">Se true usa lock per thread-safety</param>
     public void Write(string message, LogLevel level = LogLevel.Info, bool isParallel = false)
     {
+        if (level == LogLevel.Warn)
+            Interlocked.Increment(ref _warningCount);
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         var logEntry = $"[{timestamp}] [{level}] {message}";
 

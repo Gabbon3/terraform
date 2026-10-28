@@ -7,7 +7,10 @@ namespace terraform.lib.engine;
 
 public enum StepStatus { Succeeded, Failed, Skipped, Cancelled, NotRun }
 
-public sealed record StepResult(string Id, string Name, StepStatus Status, string Message, TimeSpan Duration);
+public sealed record StepResult(string Id, string Name, StepStatus Status, string Message, TimeSpan Duration)
+{
+    public int WarningCount { get; init; }
+}
 
 public sealed record PipelineRunResult(IReadOnlyList<string> ValidationErrors, IReadOnlyList<StepResult> Steps, bool Cancelled)
 {
@@ -22,11 +25,20 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
 
     private sealed record PlannedStep(PipelineStep Step, string Id, string Name, IAction? Action, JsonElement Config);
 
+    /// <summary>Valida tutti gli step abilitati senza eseguirli e senza controlli di filesystem o rete.</summary>
+    public static IReadOnlyList<string> Validate(PipelineDefinition pipeline, ActionResolver resolver)
+    {
+        var errors = new List<string>();
+        var variables = BuildVariables(pipeline, errors);
+        BuildPlan(pipeline, variables, errors, resolver);
+        return errors;
+    }
+
     public async Task<PipelineRunResult> RunAsync(PipelineDefinition pipeline, bool dryRun, CancellationToken cancellationToken = default)
     {
         var errors = new List<string>();
         var variables = BuildVariables(pipeline, errors);
-        var plan = BuildPlan(pipeline, variables, errors);
+        var plan = BuildPlan(pipeline, variables, errors, resolver);
 
         if (errors.Count > 0 || variables is null)
         {
@@ -80,6 +92,7 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
             }
 
             logger.Write(header, LogLevel.Info);
+            var warningsBefore = logger.WarningCount;
             var stopwatch = Stopwatch.StartNew();
             ActionResult outcome;
 
@@ -90,7 +103,10 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 logger.Write($"{header}: annullato", LogLevel.Warn);
-                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Cancelled, "annullato", stopwatch.Elapsed));
+                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Cancelled, "annullato", stopwatch.Elapsed)
+                {
+                    WarningCount = logger.WarningCount - warningsBefore
+                });
                 halted = cancelled = true;
                 continue;
             }
@@ -106,16 +122,24 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
             stopwatch.Stop();
             var elapsed = Formatter.Milliseconds(stopwatch.ElapsedMilliseconds);
             var detail = string.IsNullOrWhiteSpace(outcome.Message) ? "" : $" - {outcome.Message}";
+            var warningCount = logger.WarningCount - warningsBefore;
 
             if (outcome.Success)
             {
-                logger.Write($"{header}: completato in {elapsed}{detail}", LogLevel.Success);
-                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Succeeded, outcome.Message, stopwatch.Elapsed));
+                var warningNote = warningCount > 0 ? $" ({warningCount} avvisi)" : "";
+                logger.Write($"{header}: completato in {elapsed}{warningNote}{detail}", LogLevel.Success);
+                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Succeeded, outcome.Message, stopwatch.Elapsed)
+                {
+                    WarningCount = warningCount
+                });
             }
             else
             {
                 logger.Write($"{header}: FALLITO dopo {elapsed}{detail}", LogLevel.Error);
-                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Failed, outcome.Message, stopwatch.Elapsed));
+                results.Add(new StepResult(planned.Id, planned.Name, StepStatus.Failed, outcome.Message, stopwatch.Elapsed)
+                {
+                    WarningCount = warningCount
+                });
                 halted = true;
             }
         }
@@ -138,7 +162,7 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
     }
 
     // Raccoglie tutti gli errori prima di eseguire qualsiasi step.
-    private List<PlannedStep> BuildPlan(PipelineDefinition pipeline, VariableEngine? variables, List<string> errors)
+    private static List<PlannedStep> BuildPlan(PipelineDefinition pipeline, VariableEngine? variables, List<string> errors, ActionResolver resolver)
     {
         var plan = new List<PlannedStep>();
         var steps = pipeline.Steps;
@@ -226,6 +250,25 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
                 }
             }
 
+            // Stesso contratto per run, dry-run e validate: qui nessuna Action puo' fare I/O.
+            if (variables is not null)
+            {
+                try
+                {
+                    action.Validate(config);
+                }
+                catch (ActionConfigException ex)
+                {
+                    errors.Add($"{id}.config: {ex.Message}");
+                    continue;
+                }
+                catch (VariableResolutionException ex)
+                {
+                    errors.Add($"{id}.config: {ex.Message}");
+                    continue;
+                }
+            }
+
             plan.Add(new PlannedStep(step, id, name, action, config));
         }
 
@@ -247,7 +290,8 @@ public sealed class PipelineRunner(ActionResolver resolver, Logger logger)
                 _ => ("NON ESEGUITO", LogLevel.Warn)
             };
 
-            logger.Write($"  {label,-12} {result.Id} - {result.Name}", level);
+            var warningNote = result.WarningCount > 0 ? $" ({result.WarningCount} avvisi)" : "";
+            logger.Write($"  {label,-12} {result.Id} - {result.Name}{warningNote}", level);
         }
     }
 }

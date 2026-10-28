@@ -67,6 +67,8 @@ internal sealed class FakeAction(string type, Func<ActionContext, JsonElement, T
 
     public void Help() => ConsolePlus.Write(type);
 
+    public void Validate(JsonElement config) { }
+
     public IReadOnlySet<string> ItemTokens { get; } = itemTokens.ToFrozenSet();
 
     public Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)

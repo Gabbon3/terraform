@@ -12,6 +12,8 @@ public static class ActionCatalog
         new EditHostsAction(),
         new RobocopyAction(processRunner),
         new ExecuteProcessAction(processRunner),
-        new MsiInstallAction(processRunner)
+        new MsiInstallAction(processRunner),
+        new CreateServicesAction(processRunner),
+        new CreateTasksAction(processRunner)
     ];
 }

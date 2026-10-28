@@ -32,9 +32,12 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
     public string ActionType => "FILE-BATCH-PROCESS";
     public string ActionDescription => "Filtra file e avvia un comando per ciascuno, con parallelismo limitato.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra configurazione del batch, filtri, token per file e comportamento sugli errori.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]FILE-BATCH-PROCESS[/] - Esegue un comando per ogni file selezionato, con parallelismo limitato.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "batch", // Obbligatorio e univoco.
                     "type": "FILE-BATCH-PROCESS", // Obbligatorio.
@@ -58,28 +61,40 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
                         }
                     }
                 }
-                Solo arguments accetta {FilePath}, {FileName} (con estensione), {Directory}.
-                Gli altri {Nome} provengono da variables. Quotare i percorsi negli argomenti.
-                Auto sceglie Glob se trova * o ?, altrimenti Fixed (sottostringa); Regex non supporta lookaround/backreference.
-                Include nascosti e file di sistema; non segue junction. Root duplicate o annidate con recurse sono errori.
-                Zero file: avviso e successo. Exit code diverso da 0: file fallito; il batch continua, poi fallisce lo step.
-                Dry-run: nessun processo, mostra i primi 20 comandi e il totale; cartelle mancanti solo come avviso.
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e token");
+        ConsolePlus.WriteList([
+            "[Cyan]searchPaths[/] e [Cyan]command[/]: [Yellow]obbligatori[/]; percorsi completi e programma senza shell implicita.",
+            "[Cyan]recurse[/]: default [Green]false[/]. [Cyan]maxConcurrency[/]: default [Green]numero di CPU[/], minimo 1.",
+            "[Magenta]{FilePath}[/], [Magenta]{FileName}[/] (con estensione), [Magenta]{Directory}[/]: validi [Yellow]solo in arguments[/].",
+            "[Magenta]{Nome}[/]: gli altri token provengono dalle [Cyan]variables[/] globali. [Yellow]Quotare i percorsi[/] negli argomenti."
+        ]);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Filtri e comportamento");
+        ConsolePlus.WriteList([
+            "[Cyan]filter[/]: opzionale; omesso seleziona [Green]tutti i file[/].",
+            "[Cyan]matchType: Auto[/]: usa [Green]Glob[/] con * o ?, altrimenti [Green]Fixed[/] (sottostringa); non riconosce le regex.",
+            "[Cyan]Regex[/]: [Yellow]non supporta lookaround o backreference[/]. [Cyan]ignoreCase[/]: default true; [Cyan]matchFullPath[/]: default false.",
+            "[Cyan]dateAfter / dateBefore[/]: date relative o assolute; suffissi [Magenta]:m / :c / :a[/] = modifica / creazione / accesso.",
+            "[Cyan]minSize / maxSize[/]: byte o unita' [Magenta]k, m, g, t[/].",
+            "[Green]Include file nascosti e di sistema[/]; [Yellow]non segue junction[/]. Root duplicate o annidate con recurse sono errori.",
+            "[Yellow]Accesso negato[/] a file o cartelle: Warning con percorso e [Green]prosecuzione[/] sugli altri elementi.",
+            "[Yellow]Zero file[/]: Warning e successo. [Yellow]Exit code diverso da 0[/]: il batch continua, poi fallisce lo step.",
+            "[Cyan]Dry-run[/]: [Green]nessun processo[/]; mostra i primi [Cyan]20 comandi[/] e il totale. Cartelle mancanti: solo Warning."
+        ]);
+    }
 
     public IReadOnlySet<string> ItemTokens => VariableEngine.ReservedNames;
 
-    /// <summary>
-    /// Valida la config, poi elenca i file in streaming e lancia il comando su ciascuno con al massimo <c>maxConcurrency</c> processi insieme.
-    /// </summary>
-    /// <remarks>
-    /// La validazione viene prima di tutto: se la config è sbagliata non parte nessun processo.
-    /// Un file che fallisce non ferma gli altri; la cancellazione invece interrompe il batch e propaga l'OperationCanceledException al runner.
-    /// </remarks>
-    public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    /// <summary>Valida campi e filtro senza enumerare file o avviare comandi.</summary>
+    public void Validate(JsonElement config) => ReadConfig(config);
+
+    /// <summary>Valida tutti i campi, compreso il filtro, senza dipendere dallo stato del filesystem.</summary>
+    private static (Config Settings, List<string> Roots, FileSystemFilter? Filter) ReadConfig(JsonElement config)
     {
         var settings = ActionConfig.Read<Config>(config);
         var command = ActionConfig.Required(settings.Command, "command");
-        var arguments = settings.Arguments ?? "";
         var maxConcurrency = settings.MaxConcurrency ?? Environment.ProcessorCount;
 
         if (maxConcurrency < 1)
@@ -90,16 +105,45 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
         // Il pre-flight lascia intatti i token per-file ovunque: fuori da "arguments" non avrebbero alcun valore.
         RejectItemTokens(command, "command");
         RejectItemTokens(settings.Filter?.Pattern, "filter.pattern");
-
-        var roots = ValidateRoots(settings, context, out var rootErrors);
+        var roots = ValidateRoots(settings, out var rootErrors);
 
         if (rootErrors.Count > 0)
         {
             throw new ActionConfigException(string.Join("; ", rootErrors));
         }
 
-        // Costruito prima del dry-run: una regex non valida deve emergere anche lì.
-        var filter = settings.Filter?.Build();
+        return (settings, roots, settings.Filter?.Build());
+    }
+
+    /// <summary>Elenca i file accessibili e lancia i comandi con parallelismo limitato; gli errori nativi restano bloccanti a fine batch.</summary>
+    public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    {
+        var (settings, roots, filter) = ReadConfig(config);
+        var command = settings.Command!;
+        var arguments = settings.Arguments ?? "";
+        var maxConcurrency = settings.MaxConcurrency ?? Environment.ProcessorCount;
+        foreach (var root in roots.ToArray())
+        {
+            // Directory.Exists nasconde l'accesso negato: GetAttributes permette invece di distinguerlo.
+            try
+            {
+                if ((File.GetAttributes(root) & FileAttributes.Directory) == 0)
+                    throw new ActionConfigException($"searchPaths: non e' una cartella: {root}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                context.Logger.Write($"{root}: accesso negato, saltato: {ex.Message}", LogLevel.Warn);
+                roots.Remove(root);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                if (!context.IsDryRun)
+                    throw new ActionConfigException($"searchPaths: cartella inesistente: {root}");
+                context.Logger.Write($"[DRY-RUN] cartella inesistente, nessun file elencabile: {root}", LogLevel.Warn);
+                roots.Remove(root);
+            }
+        }
+
         var token = context.CancellationToken;
 
         // Interlocked a ogni file: costa nanosecondi contro i millisecondi dell'avvio di un processo, e ForEachAsync non offre stato per worker.
@@ -111,7 +155,7 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
             return DryRun(context, roots, settings.Recurse, filter, command, arguments);
         }
 
-        var files = EnumerateFiles(roots, settings.Recurse, filter);
+        var files = EnumerateFiles(context, roots, settings.Recurse, filter);
         var options = new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency, CancellationToken = token };
 
         // Su un IEnumerable ForEachAsync serializza le MoveNext: il disco si legge man mano che i worker si liberano, senza mai caricare l'elenco intero.
@@ -168,7 +212,7 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
     {
         long total = 0;
 
-        foreach (var path in EnumerateFiles(roots, recurse, filter))
+        foreach (var path in EnumerateFiles(context, roots, recurse, filter))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
 
@@ -250,15 +294,13 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
     /// <remarks>
     /// Per ogni percorso:
     /// 1. rifiuta i token per-file e i percorsi non completi;
-    /// 2. verifica che la cartella esista; in dry-run l'assenza è solo un avviso, perché potrebbe crearla uno step precedente
-    ///    che non è stato eseguito davvero (la root resta nell'elenco, così il punto 3 vale comunque);
-    /// 3. la confronta con le root già accettate: se coincidono, o se una contiene l'altra con <c>recurse</c> attivo,
+    /// 2. la confronta con le root già accettate: se coincidono, o se una contiene l'altra con <c>recurse</c> attivo,
     ///    gli stessi file verrebbero visitati due volte e il comando girerebbe due volte sullo stesso file.
     /// Senza <c>recurse</c> due root annidate non si sovrappongono (ognuna guarda solo i file della propria cartella), quindi sono ammesse.
     /// </remarks>
     /// <param name="errors">Messaggi di errore; vuoto se la config è valida.</param>
     /// <returns>Le root normalizzate, senza backslash finale tranne le radici di unità come <c>C:\</c>.</returns>
-    private static List<string> ValidateRoots(Config settings, ActionContext context, out List<string> errors)
+    private static List<string> ValidateRoots(Config settings, out List<string> errors)
     {
         errors = [];
         var roots = new List<string>();
@@ -273,18 +315,6 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
         {
             RejectItemTokens(settings.SearchPaths[i], $"searchPaths[{i}]");
             var root = Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(settings.SearchPaths[i], $"searchPaths[{i}]"));
-
-            if (!Directory.Exists(root))
-            {
-                // In dry-run la cartella può essere creata da uno step precedente che non è stato eseguito davvero.
-                if (!context.IsDryRun)
-                {
-                    errors.Add($"searchPaths[{i}]: cartella inesistente: {root}");
-                    continue;
-                }
-
-                context.Logger.Write($"[DRY-RUN] cartella inesistente, nessun file elencabile: {root}", LogLevel.Warn);
-            }
 
             foreach (var other in roots)
             {
@@ -315,9 +345,29 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
     }
 
     /// <summary>
-    /// Concatena in modo pigro i file di tutte le root, una dopo l'altra. Le root inesistenti (ammesse solo in dry-run da
-    /// <see cref="ValidateRoots"/>) vengono saltate, perché l'enumerazione di una cartella assente lancia.
+    /// Elenca i file e segnala gli accessi negati senza interrompere il batch. Le root mancanti in dry-run sono gia' segnalate.
     /// </summary>
-    private static IEnumerable<string> EnumerateFiles(IReadOnlyList<string> roots, bool recurse, FileSystemFilter? filter) =>
-        roots.Where(Directory.Exists).SelectMany(root => Enumerables.Files(root, filter, recurse));
+    private static IEnumerable<string> EnumerateFiles(ActionContext context, IReadOnlyList<string> roots, bool recurse, FileSystemFilter? filter)
+    {
+        foreach (var root in roots)
+        {
+            foreach (var path in Enumerables.Files(root, filter, recurse,
+                (denied, error) => context.Logger.Write($"{denied}: accesso negato, saltato: {error.Message}", LogLevel.Warn, isParallel: true),
+                context.CancellationToken))
+            {
+                context.CancellationToken.ThrowIfCancellationRequested();
+                // L'elenco puo' essere leggibile anche se il contenuto del singolo file non lo e'.
+                try
+                {
+                    using var handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    context.Logger.Write($"{path}: accesso negato, saltato: {ex.Message}", LogLevel.Warn, isParallel: true);
+                    continue;
+                }
+                yield return path;
+            }
+        }
+    }
 }

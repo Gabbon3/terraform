@@ -59,4 +59,44 @@ public sealed class ProcessRunnerTests
 
         Assert.Contains("definitely-not-an-executable.exe", ex.Message);
     }
+
+    /// <summary>Streaming completo di stdout con stderr voluminoso drenato in parallelo.</summary>
+    [Fact]
+    public async Task Streaming_does_not_truncate_output_or_deadlock_on_stderr()
+    {
+        var count = 0;
+        await foreach (var line in _runner.StreamAsync("cmd.exe",
+            "/q /c \"for /l %i in (1,1,2000) do (echo line %i & echo error %i 1>&2)\"", CancellationToken.None))
+        {
+            count++;
+        }
+        Assert.Equal(2000, count);
+    }
+
+    /// <summary>Annullamento o interruzione del consumer chiudono anche il processo PowerShell sospeso.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ending_streaming_kills_the_process(bool cancel)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var stream = ProcessUtils.ExecuteAndStreamPowerShellAsync(_runner, "$PID; Start-Sleep -Seconds 30", cts.Token);
+        var enumerator = stream.GetAsyncEnumerator();
+        int pid;
+        try
+        {
+            Assert.True(await enumerator.MoveNextAsync());
+            pid = int.Parse(enumerator.Current);
+            if (cancel)
+            {
+                cts.Cancel();
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await enumerator.MoveNextAsync());
+            }
+        }
+        finally
+        {
+            await enumerator.DisposeAsync();
+        }
+        Assert.Throws<ArgumentException>(() => Process.GetProcessById(pid));
+    }
 }

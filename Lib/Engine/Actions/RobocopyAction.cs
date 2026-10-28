@@ -59,15 +59,21 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
 {
     private const int SummaryLines = 12;
 
-    [GeneratedRegex(@"(?<!\S)/(MIR|PURGE|MOVE?)(?![A-Za-z0-9])", RegexOptions.IgnoreCase)]
+    [GeneratedRegex("""(?<!\S)"?/(MIR|PURGE|MOVE?)(?![A-Za-z0-9])""", RegexOptions.IgnoreCase)]
     private static partial Regex DestructiveSwitch();
+
+    [GeneratedRegex("""(?<!\S)"?/MOVE?(?![A-Za-z0-9])""", RegexOptions.IgnoreCase)]
+    private static partial Regex MoveSwitch();
 
     public string ActionType => "ROBOCOPY";
     public string ActionDescription => "Copia file e cartelle con Robocopy, preservando metadati e applicando le opzioni configurate.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra configurazione Robocopy, default di copia e avvertenze sulle operazioni distruttive.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]ROBOCOPY[/] - Copia cartelle o un file con i metadati e le opzioni configurate.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "copy", // Obbligatorio e univoco.
                     "type": "ROBOCOPY", // Obbligatorio.
@@ -78,8 +84,8 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
                         "destination": "D:\\data", // Obbligatorio: percorso completo; per file, include il nome file.
                         "mirror": true, // Opzionale, default true per cartelle: ELIMINA gli elementi extra in destinazione.
                         "threads": 16, // Opzionale, default 16, da 1 a 128; solo cartelle.
-                        "retries": 1, // Opzionale, default 1, minimo 0.
-                        "waitSeconds": 1, // Opzionale, default 1, minimo 0.
+                        "retries": 1, // Opzionale, default 1, minimo 0. Se la copia fallisce, quanti tentativi ripetere.
+                        "waitSeconds": 1, // Opzionale, default 1, minimo 0. E' il tempo di attesa tra un retry e l'altro in secondi.
                         "copyOptions": "/COPYALL /B /DCOPY:DAT", // Opzionale: questi sono i default, vuoto li rimuove.
                         "files": ["*.dll"], // Opzionale: filtri file, solo per sorgente cartella.
                         "excludeDirs": ["logs"], // Opzionale: esclusioni /XD, solo cartelle.
@@ -87,13 +93,33 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
                         "extraArguments": "" // Opzionale: opzioni aggiuntive accodate.
                     }
                 }
-                {SourceServer} va definita in variables. Omettere files per copiare tutti i file.
-                /COPYALL copia dati, attributi, date e sicurezza; /B usa privilegi backup; /DCOPY:DAT copia metadati directory.
-                /NP e' sempre presente; /SECFIX riapplica la sicurezza se la cartella destinazione esiste gia'.
-                Per una sorgente file: niente /MIR o /MT; files/excludeDirs/excludeFiles non ammessi.
-                Le opzioni distruttive sono vietate verso radici di unita' o share. Exit 0-7: successo; da 8: errore.
-                Dry-run: avvia robocopy con /L (solo elenco, nessuna copia o cancellazione).
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e default");
+        ConsolePlus.WriteList([
+            "[Cyan]source / destination[/]: [Yellow]obbligatori[/], percorsi completi. Per un file, destination include il nome del file.",
+            "[Magenta]{SourceServer}[/]: va definita nelle [Cyan]variables[/]. Omettere [Cyan]files[/] per copiare tutti i file.",
+            "[Yellow]mirror: true (default per cartelle)[/]: usa [Yellow]/MIR[/] ed [Yellow]ELIMINA gli elementi extra in destinazione[/]. [Cyan]mirror: false[/] disattiva /MIR.",
+            "[Cyan]threads[/]: default [Green]16[/], da 1 a 128; [Cyan]retries / waitSeconds[/]: default [Green]1[/], minimo 0.",
+            "[Cyan]copyOptions[/]: default [Green]/COPYALL /B /DCOPY:DAT[/]; stringa vuota rimuove queste opzioni.",
+            "[Cyan]/COPYALL[/]: dati, attributi, date e sicurezza. [Cyan]/B[/]: privilegi backup. [Cyan]/DCOPY:DAT[/]: metadati directory.",
+            "[Cyan]/NP[/]: sempre presente. [Cyan]/SECFIX[/]: riapplica la sicurezza se la cartella destinazione esiste gia'.",
+            "[Cyan]extraArguments[/]: opzioni aggiuntive accodate, senza sostituire i default."
+        ]);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Vincoli e simulazione");
+        ConsolePlus.WriteList([
+            "[Yellow]Sorgente file[/]: niente [Cyan]/MIR[/] o [Cyan]/MT[/]; [Cyan]files / excludeDirs / excludeFiles[/] non ammessi.",
+            "[Yellow]Sorgente e destinazione sovrapposte vietate[/], in entrambe le direzioni.",
+            "[Yellow]Operazioni distruttive vietate[/] verso radici di unita' o share; [Cyan]/MOV e /MOVE[/] vietati anche da una radice sorgente.",
+            "[Cyan]Exit code[/]: [Green]0-7 = successo[/]; [Yellow]da 8 = errore[/].",
+            "[Cyan]Dry-run[/]: avvia Robocopy con [Magenta]/L[/], [Green]solo elenco, nessuna copia o cancellazione[/]."
+        ]);
+    }
+
+    /// <summary>Valida opzioni e percorsi senza interrogare disco o share; il tipo file/cartella viene verificato a runtime.</summary>
+    public void Validate(JsonElement config) =>
+        Build(ActionConfig.Read<RobocopyConfig>(config), false, _ => false, _ => false);
 
     public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
     {
@@ -130,6 +156,12 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
 
         var source = ActionConfig.FullPath(config.Source, "source");
         var destination = ActionConfig.FullPath(config.Destination, "destination");
+        // Controllo lessicale prima di ogni I/O: non permette copie dentro se stesse o mirror su un proprio antenato.
+        // I separatori finali evitano falsi positivi come D:\data e D:\database.
+        if (IsInside(source, destination) || IsInside(destination, source))
+        {
+            throw new ActionConfigException("source e destination si sovrappongono: una contiene l'altra");
+        }
         var sourceIsFile = fileExists(source);
         var retries = config.Retries ?? 1;
         var wait = config.WaitSeconds ?? 1;
@@ -165,6 +197,11 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
 
         // /MIR, /PURGE e /MOVE cancellano: su una radice di unità un errore di configurazione sarebbe irreparabile.
         var deletes = mirror || DestructiveSwitch().IsMatch($"{copyOptions} {extra}");
+
+        if (MoveSwitch().IsMatch($"{copyOptions} {extra}") && IsRoot(sourceDir))
+        {
+            throw new ActionConfigException($"source: /MOV e /MOVE non sono ammessi dalla radice '{sourceDir}'");
+        }
 
         if (deletes && IsRoot(destinationDir))
         {
@@ -245,6 +282,9 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
     // GetPathRoot omette il backslash finale per le share UNC (\\server\share), quindi si confronta senza.
     private static bool IsRoot(string path) =>
         string.Equals(Path.TrimEndingDirectorySeparator(Path.GetPathRoot(path) ?? ""), Path.TrimEndingDirectorySeparator(path), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsInside(string path, string parent) =>
+        path.StartsWith(Path.EndsInDirectorySeparator(parent) ? parent : parent + "\\", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> Items(List<string>? values, string field) =>
         (values ?? []).Select((value, i) => Quote(value, $"{field}[{i}]"));

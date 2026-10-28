@@ -34,9 +34,12 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
     public string ActionType => "MSI-INSTALL";
     public string ActionDescription => "Installa in sequenza pacchetti MSI usando msiexec.exe.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra configurazione MSI, token per pacchetto e codici di successo.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]MSI-INSTALL[/] - Installa pacchetti MSI in sequenza tramite msiexec.exe.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "frameworks", // Obbligatorio e univoco.
                     "type": "MSI-INSTALL", // Obbligatorio.
@@ -49,12 +52,21 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
                         "ignoreIfNotFound": false // Opzionale, default false; true salta i pacchetti mancanti con Warn.
                     }
                 }
-                {MsiPath} indica il percorso corrente di paths: non definirlo in variables; valido solo in msiArguments.
-                Gli altri {Nome} provengono da variables. /i installa, /qn non mostra UI, /norestart impedisce il riavvio.
-                3010 = successo con riavvio richiesto; 1638 non e' successo salvo override esplicito.
-                File obbligatori mancanti: nessun processo avviato. Primo fallimento: interrompe la sequenza.
-                Dry-run: mostra i comandi senza avviarli, tollera pacchetti non ancora presenti.
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
+        ConsolePlus.WriteList([
+            "[Cyan]paths[/]: [Yellow]obbligatorio[/], almeno un percorso completo [Cyan].msi[/]; installazione [Green]in ordine[/].",
+            "[Cyan]msiArguments[/]: default [Green]/i \"{MsiPath}\" /qn /norestart[/]; deve contenere [Magenta]{MsiPath}[/].",
+            "[Magenta]{MsiPath}[/]: percorso del pacchetto corrente, valido [Yellow]solo in msiArguments[/]; non definirlo in variables.",
+            "[Magenta]{Nome}[/]: gli altri token provengono dalle [Cyan]variables[/] globali.",
+            "[Cyan]/i[/] installa, [Cyan]/qn[/] nasconde la UI, [Cyan]/norestart[/] impedisce il riavvio automatico.",
+            "[Cyan]successExitCodes[/]: default [Green][0, 3010][/], lista non vuota; [Green]3010[/] = riavvio richiesto. [Yellow]1638 non e' successo[/] salvo override.",
+            "[Yellow]File obbligatorio mancante[/]: nessun processo avviato; [Cyan]ignoreIfNotFound: true[/] lo salta con Warning.",
+            "[Yellow]Primo fallimento[/]: interrompe la sequenza.",
+            "[Cyan]Dry-run[/]: mostra i comandi [Green]senza avviarli[/]; tollera pacchetti non ancora presenti."
+        ]);
+    }
 
     // Dichiarato perché il runner lasci intatto {MsiPath} nel pre-flight, altrimenti lo segnalerebbe come variabile sconosciuta.
     public IReadOnlySet<string> ItemTokens => MsiTokens;
@@ -63,6 +75,13 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
     /// Valida l'intera config e prepara un comando msiexec per pacchetto, poi li esegue in ordine (vedi <see cref="InstallSequence"/>).
     /// </summary>
     public Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+        => InstallSequence.RunAsync(context, processRunner, PrepareItems(config, context.Variables));
+
+    /// <summary>Valida percorsi, exit code e template senza leggere pacchetti MSI.</summary>
+    public void Validate(JsonElement config) => PrepareItems(config, new VariableEngine());
+
+    /// <summary>Valida percorsi e template senza leggere pacchetti; risolve solo il token per-item rimasto dopo il preflight.</summary>
+    private static List<InstallItem> PrepareItems(JsonElement config, VariableEngine variables)
     {
         var settings = ActionConfig.Read<Config>(config);
 
@@ -103,11 +122,11 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
                 Name: Path.GetFileName(path),
                 SourcePath: path,
                 FileName: "msiexec.exe",
-                Arguments: context.Variables.Resolve(template, new Dictionary<string, string> { ["MsiPath"] = path }),
+                Arguments: variables.Resolve(template, new Dictionary<string, string> { ["MsiPath"] = path }),
                 SuccessExitCodes: codes,
                 IgnoreIfNotFound: settings.IgnoreIfNotFound));
         }
 
-        return InstallSequence.RunAsync(context, processRunner, items);
+        return items;
     }
 }

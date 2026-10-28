@@ -10,7 +10,7 @@ public sealed class ActionCatalogTests
     {
         var actions = ActionCatalog.Create(new FakeProcessRunner());
 
-        Assert.Equal(6, actions.Count);
+        Assert.Equal(8, actions.Count);
         Assert.Equal(actions.Count, actions.Select(action => action.ActionType).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.All(actions, action => Assert.False(string.IsNullOrWhiteSpace(action.ActionDescription)));
     }

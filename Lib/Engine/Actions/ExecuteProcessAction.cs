@@ -40,9 +40,12 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
     public string ActionType => "EXECUTE-PROCESS";
     public string ActionDescription => "Esegue in sequenza programmi o installer con argomenti e codici di successo configurabili.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra configurazione degli installer, precedenza dei default e gestione dei fallimenti.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]EXECUTE-PROCESS[/] - Esegue programmi in sequenza; si ferma al primo fallimento.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "software", // Obbligatorio e univoco.
                     "type": "EXECUTE-PROCESS", // Obbligatorio.
@@ -63,11 +66,20 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
                         ]
                     }
                 }
-                I valori stringa accettano {Nome} definiti in variables. Nessuna shell implicita.
-                3010 = riavvio richiesto; 1638 = versione gia' installata.
-                File obbligatori mancanti: fallisce prima di avviare programmi.
-                Dry-run: nessun processo; i file obbligatori mancanti sono solo avvisi.
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
+        ConsolePlus.WriteList([
+            "[Cyan]items[/]: [Yellow]obbligatorio[/], almeno un elemento con [Cyan]path[/] completo; esecuzione [Green]in ordine[/].",
+            "[Cyan]arguments[/] e [Cyan]successExitCodes[/] dell'item sostituiscono i rispettivi default; anche arguments vuoto ha precedenza.",
+            "[Cyan]defaultArguments[/]: default vuoto. [Cyan]defaultSuccessExitCodes[/]: [Green][0, 3010, 1638][/]; le liste di codici non possono essere vuote.",
+            "[Green]3010[/] = riavvio richiesto; [Green]1638[/] = versione gia' installata.",
+            "[Magenta]{Nome}[/]: variabile globale definita in [Cyan]variables[/]. [Yellow]Nessuna shell implicita[/].",
+            "[Yellow]File obbligatorio mancante[/]: fallisce prima di avviare programmi; [Cyan]ignoreIfNotFound: true[/] lo salta con Warning.",
+            "[Yellow]Primo fallimento[/]: interrompe la sequenza. [Cyan]manualStepsWarning[/] compare solo se lo step riesce.",
+            "[Cyan]Dry-run[/]: mostra i comandi, [Green]senza avviare processi[/]; file non ancora presenti segnalati come avvisi."
+        ]);
+    }
 
     /// <summary>
     /// Valida l'intera config, poi esegue gli item in ordine (vedi <see cref="InstallSequence"/>).
@@ -78,7 +90,23 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
     public async Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
     {
         var settings = ActionConfig.Read<Config>(config);
+        var items = PrepareItems(settings);
+        var result = await InstallSequence.RunAsync(context, processRunner, items);
 
+        if (result.Success && !string.IsNullOrWhiteSpace(settings.ManualStepsWarning))
+        {
+            context.Logger.Write(settings.ManualStepsWarning, LogLevel.Warn);
+        }
+
+        return result;
+    }
+
+    /// <summary>Valida gli item e gli exit code senza verificare la presenza degli eseguibili.</summary>
+    public void Validate(JsonElement config) => PrepareItems(ActionConfig.Read<Config>(config));
+
+    /// <summary>Valida e prepara i comandi senza controllare file che potrebbero essere creati da step precedenti.</summary>
+    private static List<InstallItem> PrepareItems(Config settings)
+    {
         if (settings.Items is not { Count: > 0 })
         {
             throw new ActionConfigException("items: serve almeno un elemento");
@@ -101,13 +129,6 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
                 IgnoreIfNotFound: item.IgnoreIfNotFound));
         }
 
-        var result = await InstallSequence.RunAsync(context, processRunner, items);
-
-        if (result.Success && !string.IsNullOrWhiteSpace(settings.ManualStepsWarning))
-        {
-            context.Logger.Write(settings.ManualStepsWarning, LogLevel.Warn);
-        }
-
-        return result;
+        return items;
     }
 }

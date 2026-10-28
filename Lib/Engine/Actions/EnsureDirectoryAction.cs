@@ -21,9 +21,12 @@ public sealed class EnsureDirectoryAction : IAction
     public string ActionType => "REQUIRED-FOLDERS";
     public string ActionDescription => "Crea le cartelle configurate e i relativi genitori mancanti.";
 
-        public void Help() => ConsolePlus.Write("""
+    /// <summary>Mostra esempio di configurazione e regole operative dell'azione.</summary>
+    public void Help()
+    {
+        ConsolePlus.Write("""
                 [Cyan]REQUIRED-FOLDERS[/] - Crea cartelle e genitori mancanti; non modifica quelle esistenti.
-                Esempio di step (JSON con commenti):
+                [DarkGray]Esempio di step (JSON con commenti):[/]
                 {
                     "id": "folders", // Obbligatorio e univoco nella pipeline.
                     "type": "REQUIRED-FOLDERS", // Obbligatorio.
@@ -33,25 +36,37 @@ public sealed class EnsureDirectoryAction : IAction
                         "paths": ["D:\\data", "{RootDir}\\logs"] // Obbligatorio: almeno un percorso completo.
                     }
                 }
-                {RootDir} va definita in variables della pipeline. Un file omonimo fa fallire lo step.
-                Dry-run: mostra le cartelle da creare senza crearle.
                 """);
+        Console.WriteLine();
+        ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
+        ConsolePlus.WriteList([
+            "[Cyan]paths[/]: [Yellow]obbligatorio[/], almeno un percorso completo; crea anche i genitori mancanti.",
+            "[Magenta]{RootDir}[/]: va definita nelle [Cyan]variables[/] globali della pipeline.",
+            "[Green]Cartelle esistenti[/]: lasciate invariate. [Yellow]File omonimo[/]: lo step fallisce prima di creare cartelle.",
+            "[Cyan]Dry-run[/]: mostra le cartelle da creare, [Green]senza crearle[/]."
+        ]);
+    }
 
-    /// <summary>
-    /// Valida tutti i percorsi, poi crea quelli mancanti; in dry-run si limita a loggare cosa creerebbe.
-    /// </summary>
-    /// <remarks>
-    /// Restituisce <c>ActionResult</c> negativo (e non un'eccezione) per un file con lo stesso nome, perché è uno stato del disco e non un errore di config.
-    /// Il lavoro è sincrono: non c'è I/O asincrono da attendere, quindi il risultato è già completato.
-    /// </remarks>
-    public Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    /// <summary>Valida i percorsi senza verificarne l'esistenza.</summary>
+    public void Validate(JsonElement config) => ReadPaths(config);
+
+    /// <summary>Normalizza i percorsi senza verificarne l'esistenza, condividendo la validazione con il preflight.</summary>
+    private static List<string> ReadPaths(JsonElement config)
     {
         var settings = ActionConfig.Read<Config>(config);
-
         if (settings.Paths is not { Count: > 0 })
         {
             throw new ActionConfigException("paths: serve almeno un percorso");
         }
+        return settings.Paths.Select((path, i) =>
+            Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(path, $"paths[{i}]"))).ToList();
+    }
+
+    /// <summary>Valida tutti i percorsi, poi crea quelli mancanti; in dry-run si limita a loggare cosa creerebbe.</summary>
+    /// <remarks>Un file omonimo restituisce un risultato negativo: e' uno stato del disco, non un errore di config.</remarks>
+    public Task<ActionResult> ExecuteAsync(ActionContext context, JsonElement config)
+    {
+        var paths = ReadPaths(config);
 
         // Si valida tutto prima di creare qualcosa, così un errore non lascia la pipeline a metà.
         // Dopo aver tolto il separatore finale "D:\a" e "D:\a\" sono lo stesso percorso: `seen` evita di contarlo due volte.
@@ -59,9 +74,9 @@ public sealed class EnsureDirectoryAction : IAction
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var errors = new List<string>();
 
-        for (var i = 0; i < settings.Paths.Count; i++)
+        for (var i = 0; i < paths.Count; i++)
         {
-            var path = Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(settings.Paths[i], $"paths[{i}]"));
+            var path = paths[i];
 
             if (File.Exists(path))
             {

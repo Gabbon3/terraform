@@ -14,6 +14,7 @@ namespace terraform.lib.utils;
 /// - Il motore chiama la trasformazione solo per le entry che hanno superato il filtro: si paga solo per i file che corrispondono.
 /// - La trasformazione è il delegate della BCL (<c>FindTransform</c>) e non uno nostro: nessun tipo da imparare e nessuna chiamata di inoltro per entry.
 /// - FileSystemEntry è un ref struct e non può uscire dalla trasformazione: T deve copiare ciò che serve (percorso, dimensione, date).
+/// - La visita esplicita per cartella permette di segnalare l'accesso negato e continuare con le cartelle sorelle.
 /// - L'enumerazione è pigra e rilegge il disco a ogni giro; l'enumeratore non è thread-safe, quindi un consumatore alla volta
 ///   (Parallel.ForEachAsync serializza le MoveNext da sé).
 /// </remarks>
@@ -23,33 +24,75 @@ public static class Enumerables
     /// File sotto <paramref name="directory"/> trasformati in <typeparamref name="T"/>; le cartelle non vengono mai restituite.
     /// </summary>
     /// <remarks>
-    /// Include file nascosti e di sistema, ignora le cartelle inaccessibili e non entra nelle junction, che possono formare cicli.
+    /// Include file nascosti e di sistema e non entra nelle junction, che possono formare cicli.
+    /// Gli accessi negati sono notificati al callback, se presente; altrimenti l'eccezione viene propagata.
     /// La cartella radice deve esistere: verificarlo è compito del chiamante, altrimenti l'enumerazione lancia.
     /// </remarks>
-    public static FileSystemEnumerable<T> Files<T>(
-        string directory, FileSystemEnumerable<T>.FindTransform transform, FileSystemFilter? filter = null, bool recurse = true)
+    public static IEnumerable<T> Files<T>(
+        string directory, FileSystemEnumerable<T>.FindTransform transform, FileSystemFilter? filter = null, bool recurse = true,
+        Action<string, UnauthorizedAccessException>? onInaccessible = null, CancellationToken cancellationToken = default)
     {
         var options = new EnumerationOptions
         {
-            RecurseSubdirectories = recurse,
-            IgnoreInaccessible = true,
+            RecurseSubdirectories = false,
+            IgnoreInaccessible = false,
             AttributesToSkip = FileAttributes.None,
             ReturnSpecialDirectories = false
         };
 
-        // Il predicate si sceglie una volta sola, invece di controllare filter su ogni entry.
-        FileSystemEnumerable<T>.FindPredicate include = filter is null
-            ? static (ref FileSystemEntry entry) => !entry.IsDirectory
-            : (ref FileSystemEntry entry) => !entry.IsDirectory && filter(ref entry);
-
-        return new FileSystemEnumerable<T>(directory, transform, options)
+        var pending = new Stack<string>();
+        pending.Push(directory);
+        while (pending.TryPop(out var current))
         {
-            ShouldIncludePredicate = include,
-            ShouldRecursePredicate = static (ref FileSystemEntry entry) => (entry.Attributes & FileAttributes.ReparsePoint) == 0
-        };
+            cancellationToken.ThrowIfCancellationRequested();
+            IEnumerator<(string? Directory, T Value)> entries;
+            try
+            {
+                entries = new FileSystemEnumerable<(string? Directory, T Value)>(current,
+                    (ref FileSystemEntry entry) => entry.IsDirectory
+                        ? (entry.ToFullPath(), default!)
+                        : (null, transform(ref entry)), options)
+                {
+                    ShouldIncludePredicate = (ref FileSystemEntry entry) => entry.IsDirectory
+                        ? recurse && (entry.Attributes & FileAttributes.ReparsePoint) == 0
+                        : filter is null || filter(ref entry)
+                }.GetEnumerator();
+            }
+            catch (UnauthorizedAccessException ex) when (onInaccessible is not null)
+            {
+                onInaccessible(current, ex);
+                continue;
+            }
+
+            using (entries)
+            {
+                while (true)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    // MoveNext puo' fallire anche dopo aver restituito alcune entry: conserviamo le sorelle gia' scoperte.
+                    bool hasNext;
+                    try
+                    {
+                        hasNext = entries.MoveNext();
+                    }
+                    catch (UnauthorizedAccessException ex) when (onInaccessible is not null)
+                    {
+                        onInaccessible(current, ex);
+                        break;
+                    }
+                    if (!hasNext) break;
+                    var entry = entries.Current;
+                    if (entry.Directory is { } child)
+                        pending.Push(child);
+                    else
+                        yield return entry.Value;
+                }
+            }
+        }
     }
 
     /// <summary>Scorciatoia per i percorsi completi, il caso più comune.</summary>
-    public static FileSystemEnumerable<string> Files(string directory, FileSystemFilter? filter = null, bool recurse = true) =>
-        Files<string>(directory, static (ref FileSystemEntry entry) => entry.ToFullPath(), filter, recurse);
+    public static IEnumerable<string> Files(string directory, FileSystemFilter? filter = null, bool recurse = true,
+        Action<string, UnauthorizedAccessException>? onInaccessible = null, CancellationToken cancellationToken = default) =>
+        Files<string>(directory, static (ref FileSystemEntry entry) => entry.ToFullPath(), filter, recurse, onInaccessible, cancellationToken);
 }

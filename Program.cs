@@ -17,6 +17,10 @@ app.Configure(config =>
 {
     config.SetApplicationName("terraform");
 
+    config.AddCommand<ValidateCommand>("validate")
+        .WithDescription("Valida tutta la configurazione senza eseguire la pipeline")
+        .WithExample("validate", "pipeline.json");
+
     // Comando Pipeline
     config.AddCommand<RunCommand>("run")
         .WithDescription("Esegue una pipeline definita in un file JSON")

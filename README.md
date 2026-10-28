@@ -1,258 +1,44 @@
-# EDI Migrator
+# Terraform
 
-Tool CLI per migrare la configurazione di un server batch EDI da un server sorgente a un nuovo server target.
-
-In pratica automatizza:
-- copia strutture/cartelle e file da sorgente (Robocopy)
-- installazione prerequisiti e framework MSI
-- registrazione DLL (.NET/COM)
-- clonazione servizi Windows e task schedulati
-- aggiornamento configurazione DB pulizie con nuovo IP
-- aggiornamento file hosts per il cutover
+CLI leggero e config-driven per orchestrare pipeline di provisioning e configurazione su Windows. Ogni pipeline definisce variabili e step componibili, eseguiti in sequenza dal motore Terraform.
 
 ## Prerequisiti
 
 - Windows
-- Permessi amministratore (obbligatori per diverse operazioni: servizi, DLL, hosts)
-- Accesso ai percorsi di rete del server sorgente
-- **.NET 9 SDK installato**
+- .NET 9 SDK
+- Permessi e accesso alle risorse richiesti dalle singole Action (file, share, servizi, task o processi)
 
-Verifica SDK:
+Verifica l'SDK con `dotnet --version`.
 
-```powershell
-dotnet --version
-```
+## Build ed esecuzione
 
-Se non vedi una versione 9.x, installa .NET 9 SDK.
-
-Nel mio personale FTP è presente il file di installazione: `\\TEBTCH01\g$\ftpsite\tesi_ftp\GabrieleG\DOTNET\dotnet-sdk-9.0.315-win-x64.exe`
-
-## Come usare il software
-
-## 1) Build ed esecuzione
-
-Da root progetto:
+Dalla root del repository:
 
 ```powershell
 dotnet build
 ```
 
-Esecuzione diretta:
+Copia `Pipeline/pipeline.sample.json` in un file di lavoro, poi valida la configurazione e verifica il piano prima dell'esecuzione:
+
 ```powershell
-edi migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200
+dotnet run -- validate pipeline.json
+dotnet run -- run pipeline.json --dry-run
+dotnet run -- run pipeline.json
 ```
 
-Opzionale publish:
+Per pubblicare l'applicazione:
 
 ```powershell
 dotnet publish -c Release -r win-x64
 ```
-
-## 2) Parametri principali del comando migrator
-
-- `-s, --source-server` Nome server sorgente (es. `TEBTCH04`)
-- `-c, --source-computer` Nome computer sorgente per query remote PowerShell
-- `-t, --target-ip` Nuovo IP target (usato in fase DB/hosts)
-- `--start-from <STEP>` Avvia da uno step specifico
-- `--run-only <STEP>` Esegue solo uno step specifico
-- `--dry-run` Simula senza modificare
-- `--init-config` Crea il template `migrator_config.json`
-
-Step disponibili:
-- `Robocopy`
-- `SoftwareToInstall`
-- `InstallMsi`
-- `RegisterDll`
-- `CreateServices`
-- `CreateTasks`
-- `UpdateCleaningConfig`
-- `EditHost`
-
-## 3) Esempi pratici
-
-Migrazione completa:
-
-```powershell
-dotnet run -- migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200
-```
-
-Simulazione (consigliata prima della run reale):
-
-```powershell
-dotnet run -- migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200 --dry-run
-```
-
-Riprendi da registrazione DLL:
-
-```powershell
-dotnet run -- migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200 --start-from RegisterDll
-```
-
-Esegui solo aggiornamento DB pulizie:
-
-```powershell
-dotnet run -- migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200 --run-only UpdateCleaningConfig
-```
-
-Esegui solo aggiornamento hosts:
-
-```powershell
-dotnet run -- migrator -s TEBTCH04 -c VM1-3LW11N6-29 -t 10.20.51.200 --run-only EditHost
-```
-
-## Sezione dedicata: file di configurazione del migrator
-
-Il comando usa un file JSON chiamato `migrator_config.json` nella cartella dell'eseguibile.
-
-## A) Creazione guidata del file
-
-Genera il template:
-
-```powershell
-edi migrator --init-config
-```
-
-Questo crea un file completo con tutte le sezioni da compilare.
-
-## B) Struttura principale del file
-
-Il file contiene queste macro-sezioni:
-- `config.database`
-- `steps`
-- `1` (fase robocopy e cartelle richieste)
-- `2` (framework, DLL, software prerequisiti)
-- `3` (mappa utenze servizio -> password)
-- `4` (placeholder fase DB)
-- `5` (entry hosts)
-
-Esempio sintetico:
-
-```json
-{
-  "config": {
-    "database": {
-      "nimaster": "Server=...;Database=nimaster;...",
-      "pulizie": "Server=...;Database=maintainer;..."
-    }
-  },
-  "steps": {
-    "robocopy": { "execute": true },
-    "softwareToInstall": { "execute": true },
-    "installMsi": { "execute": true },
-    "registerDll": { "execute": true },
-    "createServices": { "execute": true },
-    "createTasks": { "execute": true },
-    "updateCleaningConfig": { "execute": true },
-    "editHost": { "execute": true }
-  },
-  "1": {
-    "robocopy": [
-      {
-        "source": "d$\\gruppotesi\\dll_euritmo",
-        "destination": "D:\\gruppotesi\\dll_euritmo",
-        "exclude": ["logs", "locks"]
-      }
-    ],
-    "requiredFolders": [
-      { "path": "D:\\elaborazioni", "recursiveDepth": 0 }
-    ]
-  },
-  "2": {
-    "frameworkPaths": ["\\\\server\\share\\frameworks"],
-    "dllRegistrationPaths": [
-      { "path": "D:\\gruppotesi\\dll", "recursive": true }
-    ],
-    "softwareToInstall": {
-      "vcppInstallerPath": "\\\\server\\share\\vc_redist.x64.exe",
-      "prerequisites": {
-        "javaInstallerPath": "\\\\server\\share\\jre-7u80-windows-i586.exe",
-        "officeIsoPath": "\\\\server\\share\\office2000.iso",
-        "officeSp3InstallerPath": "\\\\server\\share\\O2kSp3.exe"
-      }
-    }
-  },
-  "3": {
-    "services": {
-      "TITESI\\\\svc_EINT_Batch_NAS": "PASSWORD"
-    }
-  },
-  "4": {},
-  "5": {
-    "hosts": [
-      { "ip": "127.0.0.1", "host": "{SourceServer}" },
-      { "ip": "10.20.51.44", "host": "dashboard.e-integrationservice.net" }
-    ]
-  }
-}
-```
-
-## C) Come compilare correttamente le sezioni più importanti
-
-`config.database`
-- `nimaster` e `pulizie` devono essere connection string SQL Server valide.
-- `pulizie` è necessaria per lo step `UpdateCleaningConfig`.
-
-`steps`
-- Ogni step ha `execute: true|false`.
-- Se `false`, lo step viene saltato anche se incluso in run.
-
-`1.robocopy`
-- `source`: percorso relativo share sorgente (es. `d$\\...`) o UNC completo.
-- `destination`: percorso locale target.
-- `exclude`: cartelle da escludere nella copia.
-
-`1.requiredFolders`
-- `path`: cartella da garantire sul target.
-- `recursiveDepth`: profondità replica struttura da sorgente (`0` solo root, `1+` include sottocartelle, `-1` completo).
-
-`2.frameworkPaths`
-- Elenco path dove cercare MSI framework da installare.
-
-`2.dllRegistrationPaths`
-- Path con DLL da registrare.
-- `recursive: true` per includere sottocartelle.
-
-`2.softwareToInstall`
-- Percorsi installer prerequisiti (VC++, Java, Office).
-
-`3.services`
-- Dizionario `utenza -> password`.
-- Le utenze devono combaciare con quelle rilevate dai servizi/task del server sorgente.
-
-`5.hosts`
-- Mappature da applicare al file hosts locale.
-- Supporta placeholder `{SourceServer}` nel campo `host`.
-
-## D) Strategia consigliata di utilizzo del config
-
-1. Genera template con `--init-config`.
-2. Compila prima `config.database` e `3.services`.
-3. Verifica i path di rete in `1` e `2`.
-4. Esegui un `--dry-run` completo.
-5. Esegui step singoli con `--run-only` per validare le aree più critiche.
-6. Avvia la migrazione completa.
-
-## Note operative
-
-- Se il file di configurazione non esiste, il tool crea automaticamente un template ma non procede con dati reali finché non lo compili.
-- `--run-only` ha priorità su `--start-from` se entrambi sono presenti.
-- Per servizi/task servono credenziali nella sezione `3.services`; senza mappature lo step viene saltato o incompleto.
-- Lo step Office SP3 è segnalato come manuale nella logica attuale.
-
-## Troubleshooting rapido
-
-- Errore parametri obbligatori: controlla `-s`, `-c`, `-t`.
-- Nessuna modifica in DB: verifica `config.database.pulizie` e `logical_name` uguale al `--source-server`.
-- Servizi/task non creati: controlla se utente servizio esiste in `3.services`.
-- Problemi hosts: avvia il processo come amministratore.
-
 # Pipeline engine
 
-Il comando `run` esegue una pipeline descritta in un file JSON, step dopo step, con azioni generiche e configurabili. È indipendente dal comando `migrator`.
+Terraform esegue pipeline descritte in file JSON, step dopo step, con azioni generiche e configurabili.
 
 ```powershell
-edi run pipeline.json --dry-run   # valida e mostra cosa verrebbe fatto, senza modificare nulla
-edi run pipeline.json
+terraform validate pipeline.json      # solo configurazione, senza azioni ne' query al server
+terraform run pipeline.json --dry-run   # valida e mostra cosa verrebbe fatto, senza modificare nulla
+terraform run pipeline.json
 ```
 
 Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette commenti e virgole finali.
@@ -261,8 +47,9 @@ Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette co
 
 - `variables`: coppie nome/valore, usabili come `{Nome}` (maiuscole e minuscole contano) in qualunque valore stringa delle config. I valori non possono contenere altri token.
 - `pipeline`: elenco di step con `id` (univoco), `name` (opzionale), `type`, `enabled` (default `true`) e `config`.
-- Prima di eseguire qualsiasi step il motore controlla tutta la pipeline (id, tipi, token) e riporta tutti gli errori insieme. Gli step con `enabled: false` non vengono validati per tipo.
-- Gli step girano in ordine; al primo fallimento la pipeline si ferma. La config di ogni azione viene validata quando parte il suo step: `--dry-run` la esercita tutta.
+- Prima di eseguire qualsiasi step il motore controlla tutta la pipeline: id, tipi, token e config delle azioni (campi obbligatori, tipi, opzioni, filtri e guardrail). Raccoglie gli errori dei vari step indicando id, config e campo: una config errata in fondo impedisce di avviare anche il primo step. Gli step con `enabled: false` mantengono i controlli strutturali su id/type, ma non vengono validati per tipo risolto, token o config.
+- `validate` esegue lo stesso preflight statico di `run` e `run --dry-run`, restituisce `0` se valido e `1` se errato, e non crea log di esecuzione. Non controlla esistenza/accessibilita' di file, credenziali reali o server remoti: questi controlli restano runtime, per permettere agli step precedenti di creare gli artefatti necessari. Per Robocopy anche il riconoscimento sorgente file/cartella resta runtime.
+- Gli step girano in ordine; al primo fallimento la pipeline si ferma. I Warning restano non bloccanti e lo stato rimane `Succeeded`: completamento e riepilogo mostrano il numero di avvisi di ogni step, distinguendolo da un risultato pulito.
 - Tutti i percorsi devono essere completi (`D:\dir` o `\\server\share`); un percorso relativo è un errore.
 - Exit code: `0` successo, `1` errore o pipeline non valida, `130` annullata con Ctrl+C. I log sono in `logs\pipeline_<data>.log` accanto all'eseguibile.
 
@@ -276,17 +63,19 @@ Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette co
 - `matchType: Auto` non riconosce le regex: un pattern con `*` o `?` diventa Glob, altrimenti è una sottostringa. Per le regex usare `Regex` (niente lookaround né backreference).
 - In `arguments` si possono usare `{FilePath}`, `{FileName}` (con estensione) e `{Directory}`; altrove sono un errore. Il comando parte senza shell: i nomi file non vengono interpretati.
 - Include file nascosti e di sistema, non segue le junction. `searchPaths` duplicati o annidati con `recurse` attivo sono rifiutati.
+- File non leggibili e cartelle con accesso negato vengono segnalati con Warning e percorso, poi saltati: continuano gli altri file, le cartelle sorelle e gli step successivi. Non vengono soppressi gli errori I/O diversi dall'accesso negato.
 - Tutti i file vengono elaborati; lo step fallisce se almeno un comando termina con exit code diverso da 0.
 
 **`HOSTS`**: `entries` (`ip`, `host`) e `path` opzionale (default: hosts di sistema). Ogni host resta su una sola riga attiva con l'IP indicato; gli altri alias, i commenti e la codifica del file si conservano. Scrive solo se qualcosa cambia; serve l'amministratore.
 
 **`ROBOCOPY`**: `source`, `destination`, `files`, `excludeDirs`, `excludeFiles`, `mirror`, `threads`, `retries` (1), `waitSeconds` (1), `copyOptions`, `extraArguments`.
-- I default sono quelli del migrator. Per una cartella: `/MIR /MT:16 /COPYALL /B /DCOPY:DAT /R:1 /W:1 /NP`, più `/SECFIX` se la destinazione esiste già. Quindi `mirror` vale `true` se omesso e **elimina dalla destinazione ciò che non è nella sorgente**: `mirror: false` toglie `/MIR`.
+- Per una cartella i default sono `/MIR /MT:16 /COPYALL /B /DCOPY:DAT /R:1 /W:1 /NP`, più `/SECFIX` se la destinazione esiste già. Quindi `mirror` vale `true` se omesso e **elimina dalla destinazione ciò che non è nella sorgente**: `mirror: false` toglie `/MIR`.
 - Se `source` è un file, `destination` è il percorso completo del file copiato e si usano solo `/COPYALL /B /DCOPY:DAT /R:1 /W:1 /NP` (e `/SECFIX`): niente `/MIR` né `/MT`, e `files`, `excludeDirs`, `excludeFiles` non sono ammessi.
 - `copyOptions` sostituisce `/COPYALL /B /DCOPY:DAT` (stringa vuota per nessuna); `extraArguments` si aggiunge in coda senza toccare i default.
 - Exit code di robocopy da 0 a 7 sono successo, da 8 in su fallimento.
 - Con `--dry-run` aggiunge `/L`: non copia né cancella nulla ma elenca cosa succederebbe.
-- Le operazioni che cancellano (`mirror`, `/MIR`, `/PURGE`, `/MOVE`) sono rifiutate se la destinazione è la radice di un'unità o di una share: per copiare lì servono `mirror: false` e nessuno di quegli switch.
+- Sorgente e destinazione uguali o annidate l'una nell'altra sono rifiutate anche senza mirror, prima di eseguire la pipeline. Il confronto normalizza i percorsi e ignora il case, ma non risolve alias fisici (junction, unita' mappate o share diverse verso la stessa cartella).
+- Le operazioni che cancellano (`mirror`, `/MIR`, `/PURGE`, `/MOV`, `/MOVE`) sono rifiutate se la destinazione è la radice di un'unità o di una share: per copiare lì servono `mirror: false` e nessuno di quegli switch. `/MOV` e `/MOVE` sono vietati anche quando la sorgente e' una radice.
 
 **`EXECUTE-PROCESS`**: esegue in sequenza una lista di programmi, tipicamente installer `.exe`.
 - `items`: ciascuno con `path` (completo), `name` (etichetta nei log), `arguments`, `successExitCodes` e `ignoreIfNotFound`.
@@ -299,10 +88,60 @@ Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette co
 - Ogni percorso di `paths` viene installato con gli argomenti `msiArguments`, che valgono `/i "{MsiPath}" /qn /norestart` se omessi. `{MsiPath}` non è una variabile: è il percorso dell'elemento di `paths` che si sta installando, e definirlo in `variables` è un errore. `msiArguments` deve contenerlo. `successExitCodes` vale `[0, 3010]`; `ignoreIfNotFound` come sopra.
 - File mancanti, fallimenti e dry-run funzionano come in `execute-process`.
 
-Tutti i placeholder `{Nome}` di `variables` si possono usare in entrambe le azioni.
+**`CREATE-SERVICES`** e **`CREATE-TASKS`**: clonano servizi e task schedulati dal computer remoto al computer locale.
+- `sourceComputerName` (obbligatorio): usare ad esempio `"{SourceComputerName}"`, definendo il server nelle `variables` globali.
+- `credentials` (obbligatorio): mappa account/password, cercata senza distinzione di maiuscole/minuscole. Le password possono essere riferimenti a variabili globali. Se un account sorgente manca, l'elemento viene saltato con **Warning**, senza sostituire l'utenza con LocalSystem. Una mappa vuota e' ammessa ma fa saltare tutti gli elementi da creare.
+- `filter` e i suoi campi sono opzionali. **Senza filtri vengono selezionati tutti i servizi/task**. `accountPattern` applica le wildcard PowerShell all'account sorgente (`StartName` per i servizi, `Principal.UserId` per i task): ad esempio `"*svc_*"` o `"DOMINIO\\svc_*"`.
+- `filter.names` e' un array non vuoto di nomi **esatti**, confrontati senza distinzione di case. Per i servizi si usa `Name`, non `DisplayName`; per i task si puo' indicare il nome semplice oppure il percorso completo (`"\\Batch\\Import"`). Un nome task semplice seleziona anche le omonimie in cartelle diverse.
+- Se sono presenti sia `accountPattern` sia `names`, si applica l'intersezione dei filtri.
+- Il flow segue Phase3: script PowerShell, lettura NDJSON riga per riga e creazione immediata di ogni elemento, senza accumulare l'export o salvarlo su file. Un errore remoto tardivo interrompe lo step ma non annulla gli elementi gia' creati.
+- `CREATE-SERVICES` salta i servizi gia' esistenti senza aggiornarli; crea quelli nuovi con startup **Disabled**, conservando nome, display name e comando binario completo (virgolette e argomenti inclusi). Un eseguibile mancante sul target produce Warning ma non impedisce la creazione.
+- `CREATE-TASKS` esporta l'XML sorgente, imposta solo `Settings/Enabled=false` (senza alterare i trigger) e registra il task nel percorso originale, **sovrascrivendo quelli esistenti**. XML vuoto: Warning e skip; XML malformato o registrazione fallita: step fallito.
+- Nessun servizio/task viene avviato. Primo errore di query o creazione: step fallito e pipeline interrotta; gli elementi gia' creati non vengono annullati.
+- Con `--dry-run` si interroga realmente il server e si elaborano gli elementi selezionati senza crearli. Per i servizi si verificano anche esistenza locale, presenza delle credenziali nella mappa e percorso eseguibile; per i task si controllano credenziali e XML e si prepara in memoria la disabilitazione. I log mostrano nome/percorso, utenza, stato Disabled e, per i task, sovrascrittura degli esistenti; il riepilogo distingue trovati, da creare/registrare e saltati. Non vengono creati file XML temporanei ne' eseguiti comandi di scrittura. La presenza di una password nella mappa non ne verifica la validita' presso Windows; la validazione XML non sostituisce quella completa di Task Scheduler.
+- Richiedono Windows PowerShell, privilegi amministrativi sul target e accesso remoto con l'identita' che esegue terraform: CIM per i servizi, PowerShell Remoting/WinRM e modulo ScheduledTasks per i task. `credentials` riguarda le utenze degli elementi clonati, non l'autenticazione remota.
+- Le password non vengono stampate nei log e non vengono inviate alla query PowerShell; vengono passate a `sc.exe create` o `schtasks.exe /Create`. Gli argomenti dei processi sono ispezionabili da utenti privilegiati: proteggere il JSON della pipeline e non versionare password reali. L'unico file temporaneo e' l'XML del singolo task richiesto da `schtasks.exe`, rimosso anche su errore o annullamento.
+
+Esempio (sostituire server, account e password prima dell'uso):
+
+```json
+{
+  "variables": {
+    "SourceComputerName": "SERVER-SORGENTE",
+    "BatchPassword": "DA-SOSTITUIRE"
+  },
+  "pipeline": [
+    {
+      "id": "services",
+      "type": "CREATE-SERVICES",
+      "config": {
+        "sourceComputerName": "{SourceComputerName}",
+        "filter": { "accountPattern": "*svc_*" },
+        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
+      }
+    },
+    {
+      "id": "tasks",
+      "type": "CREATE-TASKS",
+      "config": {
+        "sourceComputerName": "{SourceComputerName}",
+        "filter": { "names": ["\\Batch\\Import", "\\Batch\\Export"] },
+        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
+      }
+    }
+  ]
+}
+```
+
+Tutti i placeholder `{Nome}` di `variables` si possono usare nei valori stringa delle config; non nei nomi delle proprieta' (quindi neppure nelle chiavi account di `credentials`).
 
 Per elencare le azioni disponibili con una descrizione breve usa `terraform action --list`. Per la configurazione dettagliata di una singola azione usa `terraform action <ActionType> --help`; `terraform action --help` mostra tutte le guide.
 
 ## Aggiungere un'azione
 
-Implementare `IAction` (`ActionType`, `ActionDescription`, `Help` e `ExecuteAsync`) e aggiungerla al catalogo `ActionCatalog`.
+Implementare `IAction` (`ActionType`, `ActionDescription`, `Help`, `Validate` ed `ExecuteAsync`) e aggiungerla al catalogo `ActionCatalog`. `Validate` riceve la config dopo la risoluzione delle variabili globali, deve riusare i parser di esecuzione e non deve fare I/O o modifiche: per errori usare `ActionConfigException` con il nome del campo. I controlli sullo stato del server restano in `ExecuteAsync`.
+
+La logica specifica resta nelle Action; le utility generiche di esecuzione sono in `Lib/Utils`.
+Per leggere NDJSON usare `ProcessUtils.ExecuteAndStreamPowerShellAsync(runner, script, cancellationToken)` in un `await foreach`, deserializzando ed elaborando ogni riga nell'azione.
+Il runner gestisce streaming senza troncamenti, stderr, exit code e chiusura del processo anche quando il consumer interrompe il ciclo.
+Usare `ProcessUtils.PowerShellLiteral` per i valori configurati negli script e `ProcessUtils.QuoteArgument` per gli argomenti di eseguibili Windows avviati senza shell.

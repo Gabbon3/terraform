@@ -47,7 +47,9 @@ public static class ActionHelpCommand
             foreach (var action in actions.OrderBy(action => action.ActionType, StringComparer.OrdinalIgnoreCase))
             {
                 action.Help();
+                Console.WriteLine();
                 ConsolePlus.WriteHr();
+                Console.WriteLine();
             }
 
             return true;
