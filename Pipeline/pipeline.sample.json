@@ -1,0 +1,35 @@
+{
+  // Esempio innocuo: crea cartelle e stampa il nome di ogni file. Provarlo prima con --dry-run.
+  "variables": {
+    "RootDir": "C:\\terraform-sample"
+  },
+  "pipeline": [
+    {
+      "id": "step_01_folders",
+      "name": "Crea struttura cartelle",
+      "type": "REQUIRED-FOLDERS",
+      "enabled": true,
+      "config": {
+        "paths": ["{RootDir}\\in", "{RootDir}\\out"]
+      }
+    },
+    {
+      "id": "step_02_list_files",
+      "name": "Elenca i file .dll",
+      "type": "FILE-BATCH-PROCESS",
+      "enabled": true,
+      "config": {
+        "searchPaths": ["{RootDir}\\in"],
+        "recurse": true,
+        "maxConcurrency": 4,
+        "filter": {
+          "pattern": "^EUR[CW].*\\.dll$",
+          "matchType": "Regex",
+          "ignoreCase": true
+        },
+        "command": "cmd.exe",
+        "arguments": "/c echo {FileName} in {Directory}"
+      }
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 ﻿using Spectre.Console.Cli;
 using terraform.Migrator;
+using terraform.Pipeline;
+
+if (ActionHelpCommand.TryRun(args, out var actionHelpExitCode))
+{
+    return actionHelpExitCode;
+}
 
 // ==============================================================================
 // terraform Console Application - Multi-command CLI
@@ -9,7 +15,13 @@ var app = new CommandApp();
 
 app.Configure(config =>
 {
-    config.SetApplicationName("edi");
+    config.SetApplicationName("terraform");
+
+    // Comando Pipeline
+    config.AddCommand<RunCommand>("run")
+        .WithDescription("Esegue una pipeline definita in un file JSON")
+        .WithExample("run", "pipeline.json")
+        .WithExample("run", "pipeline.json", "--dry-run");
 
     // Comando Migrator
     config.AddCommand<MigratorCommand>("migrator")

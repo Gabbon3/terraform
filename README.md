@@ -245,3 +245,64 @@ Esempio sintetico:
 - Nessuna modifica in DB: verifica `config.database.pulizie` e `logical_name` uguale al `--source-server`.
 - Servizi/task non creati: controlla se utente servizio esiste in `3.services`.
 - Problemi hosts: avvia il processo come amministratore.
+
+# Pipeline engine
+
+Il comando `run` esegue una pipeline descritta in un file JSON, step dopo step, con azioni generiche e configurabili. È indipendente dal comando `migrator`.
+
+```powershell
+edi run pipeline.json --dry-run   # valida e mostra cosa verrebbe fatto, senza modificare nulla
+edi run pipeline.json
+```
+
+Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette commenti e virgole finali.
+
+## Struttura
+
+- `variables`: coppie nome/valore, usabili come `{Nome}` (maiuscole e minuscole contano) in qualunque valore stringa delle config. I valori non possono contenere altri token.
+- `pipeline`: elenco di step con `id` (univoco), `name` (opzionale), `type`, `enabled` (default `true`) e `config`.
+- Prima di eseguire qualsiasi step il motore controlla tutta la pipeline (id, tipi, token) e riporta tutti gli errori insieme. Gli step con `enabled: false` non vengono validati per tipo.
+- Gli step girano in ordine; al primo fallimento la pipeline si ferma. La config di ogni azione viene validata quando parte il suo step: `--dry-run` la esercita tutta.
+- Tutti i percorsi devono essere completi (`D:\dir` o `\\server\share`); un percorso relativo è un errore.
+- Exit code: `0` successo, `1` errore o pipeline non valida, `130` annullata con Ctrl+C. I log sono in `logs\pipeline_<data>.log` accanto all'eseguibile.
+
+## Azioni
+
+**`REQUIRED-FOLDERS`**: crea le cartelle di `paths` (anche i genitori). Idempotente; fallisce se esiste un file con lo stesso nome.
+
+**`FILE-BATCH-PROCESS`**: esegue un comando per ogni file trovato.
+- `searchPaths` (obbligatorio), `recurse` (default `false`), `maxConcurrency` (default: numero di CPU), `command`, `arguments`.
+- `filter` (opzionale): `pattern`, `matchType` (`Auto`, `Regex`, `Fixed`, `Glob`), `ignoreCase` (default `true`), `matchFullPath`, `dateAfter`, `dateBefore` (es. `30d`, `12h`, `2024-01-15`, `60d:c`), `minSize`, `maxSize` (es. `10k`, `5m`).
+- `matchType: Auto` non riconosce le regex: un pattern con `*` o `?` diventa Glob, altrimenti è una sottostringa. Per le regex usare `Regex` (niente lookaround né backreference).
+- In `arguments` si possono usare `{FilePath}`, `{FileName}` (con estensione) e `{Directory}`; altrove sono un errore. Il comando parte senza shell: i nomi file non vengono interpretati.
+- Include file nascosti e di sistema, non segue le junction. `searchPaths` duplicati o annidati con `recurse` attivo sono rifiutati.
+- Tutti i file vengono elaborati; lo step fallisce se almeno un comando termina con exit code diverso da 0.
+
+**`HOSTS`**: `entries` (`ip`, `host`) e `path` opzionale (default: hosts di sistema). Ogni host resta su una sola riga attiva con l'IP indicato; gli altri alias, i commenti e la codifica del file si conservano. Scrive solo se qualcosa cambia; serve l'amministratore.
+
+**`ROBOCOPY`**: `source`, `destination`, `files`, `excludeDirs`, `excludeFiles`, `mirror`, `threads`, `retries` (1), `waitSeconds` (1), `copyOptions`, `extraArguments`.
+- I default sono quelli del migrator. Per una cartella: `/MIR /MT:16 /COPYALL /B /DCOPY:DAT /R:1 /W:1 /NP`, più `/SECFIX` se la destinazione esiste già. Quindi `mirror` vale `true` se omesso e **elimina dalla destinazione ciò che non è nella sorgente**: `mirror: false` toglie `/MIR`.
+- Se `source` è un file, `destination` è il percorso completo del file copiato e si usano solo `/COPYALL /B /DCOPY:DAT /R:1 /W:1 /NP` (e `/SECFIX`): niente `/MIR` né `/MT`, e `files`, `excludeDirs`, `excludeFiles` non sono ammessi.
+- `copyOptions` sostituisce `/COPYALL /B /DCOPY:DAT` (stringa vuota per nessuna); `extraArguments` si aggiunge in coda senza toccare i default.
+- Exit code di robocopy da 0 a 7 sono successo, da 8 in su fallimento.
+- Con `--dry-run` aggiunge `/L`: non copia né cancella nulla ma elenca cosa succederebbe.
+- Le operazioni che cancellano (`mirror`, `/MIR`, `/PURGE`, `/MOVE`) sono rifiutate se la destinazione è la radice di un'unità o di una share: per copiare lì servono `mirror: false` e nessuno di quegli switch.
+
+**`EXECUTE-PROCESS`**: esegue in sequenza una lista di programmi, tipicamente installer `.exe`.
+- `items`: ciascuno con `path` (completo), `name` (etichetta nei log), `arguments`, `successExitCodes` e `ignoreIfNotFound`.
+- `defaultArguments` vale per gli item senza `arguments` propri (una stringa vuota li azzera). `defaultSuccessExitCodes` vale `[0, 3010, 1638]` se omesso: 3010 = riavvio richiesto, 1638 = già installato.
+- Se manca un file obbligatorio lo step fallisce prima di avviare qualunque processo; con `ignoreIfNotFound: true` logga un avviso e prosegue. Ci si ferma al primo item fallito.
+- `manualStepsWarning` è un messaggio mostrato a fine step, come promemoria per i passaggi manuali.
+- Con `--dry-run` mostra i comandi senza avviarli; un file non ancora presente è solo un avviso, perché potrebbe copiarlo uno step precedente.
+
+**`MSI-INSTALL`**: installa in sequenza i pacchetti `.msi` di `paths` con `msiexec.exe`.
+- Ogni percorso di `paths` viene installato con gli argomenti `msiArguments`, che valgono `/i "{MsiPath}" /qn /norestart` se omessi. `{MsiPath}` non è una variabile: è il percorso dell'elemento di `paths` che si sta installando, e definirlo in `variables` è un errore. `msiArguments` deve contenerlo. `successExitCodes` vale `[0, 3010]`; `ignoreIfNotFound` come sopra.
+- File mancanti, fallimenti e dry-run funzionano come in `execute-process`.
+
+Tutti i placeholder `{Nome}` di `variables` si possono usare in entrambe le azioni.
+
+Per elencare le azioni disponibili con una descrizione breve usa `terraform action --list`. Per la configurazione dettagliata di una singola azione usa `terraform action <ActionType> --help`; `terraform action --help` mostra tutte le guide.
+
+## Aggiungere un'azione
+
+Implementare `IAction` (`ActionType`, `ActionDescription`, `Help` e `ExecuteAsync`) e aggiungerla al catalogo `ActionCatalog`.
