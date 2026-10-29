@@ -19,7 +19,7 @@ public interface IAction
     string ActionType { get; }
     string ActionDescription { get; }
 
-    /// <summary>Stampa la configurazione JSON, i campi obbligatori e i default dell'azione.</summary>
+    /// <summary>Stampa un esempio YAML, i campi obbligatori e i default dell'azione.</summary>
     void Help();
 
     // Token che l'azione risolve da sola per ogni elemento: il pre-flight del runner li lascia intatti.

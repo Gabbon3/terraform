@@ -73,26 +73,23 @@ public sealed partial class RobocopyAction(IProcessRunner processRunner) : IActi
     {
         ConsolePlus.Write("""
                 [Cyan]ROBOCOPY[/] - Copia cartelle o un file con i metadati e le opzioni configurate.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "copy", // Obbligatorio e univoco.
-                    "type": "ROBOCOPY", // Obbligatorio.
-                    "name": "Copia", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "source": "\\\\{SourceServer}\\d$\\data", // Obbligatorio: percorso completo della sorgente.
-                        "destination": "D:\\data", // Obbligatorio: percorso completo; per file, include il nome file.
-                        "mirror": true, // Opzionale, default true per cartelle: ELIMINA gli elementi extra in destinazione.
-                        "threads": 16, // Opzionale, default 16, da 1 a 128; solo cartelle.
-                        "retries": 1, // Opzionale, default 1, minimo 0. Se la copia fallisce, quanti tentativi ripetere.
-                        "waitSeconds": 1, // Opzionale, default 1, minimo 0. E' il tempo di attesa tra un retry e l'altro in secondi.
-                        "copyOptions": "/COPYALL /B /DCOPY:DAT", // Opzionale: questi sono i default, vuoto li rimuove.
-                        "files": ["*.dll"], // Opzionale: filtri file, solo per sorgente cartella.
-                        "excludeDirs": ["logs"], // Opzionale: esclusioni /XD, solo cartelle.
-                        "excludeFiles": ["*.tmp"], // Opzionale: esclusioni /XF, solo cartelle.
-                        "extraArguments": "" // Opzionale: opzioni aggiuntive accodate.
-                    }
-                }
+                                [DarkGray]Esempio di step YAML:[/]
+                                id: copy # Obbligatorio e univoco.
+                                type: ROBOCOPY # Obbligatorio.
+                                name: Copia # Opzionale: etichetta per i log.
+                                enabled: true # Opzionale, default true.
+                                config:
+                                    source: '\\{SourceServer}\d$\data' # Obbligatorio: percorso completo della sorgente.
+                                    destination: 'D:\data' # Obbligatorio: percorso completo; per file, include il nome file.
+                                    mirror: true # Opzionale, default true per cartelle: ELIMINA gli elementi extra in destinazione.
+                                    threads: 16 # Opzionale, default 16, da 1 a 128; solo cartelle.
+                                    retries: 1 # Opzionale, default 1, minimo 0. Se la copia fallisce, quanti tentativi ripetere.
+                                    waitSeconds: 1 # Opzionale, default 1, minimo 0.
+                                    copyOptions: '/COPYALL /B /DCOPY:DAT' # Opzionale: questi sono i default, vuoto li rimuove.
+                                    files: ['*.dll'] # Opzionale: filtri file, solo per sorgente cartella.
+                                    excludeDirs: [logs] # Opzionale: esclusioni /XD, solo cartelle.
+                                    excludeFiles: ['*.tmp'] # Opzionale: esclusioni /XF, solo cartelle.
+                                    extraArguments: '' # Opzionale: opzioni aggiuntive accodate.
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e default");

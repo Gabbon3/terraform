@@ -19,21 +19,16 @@ public sealed class CreateServicesAction(IProcessRunner processRunner) : IAction
     {
         ConsolePlus.Write("""
         [Cyan]CREATE-SERVICES[/] - Clona servizi dal server sorgente al computer locale.
-        [DarkGray]Esempio di step (JSON):[/]
-        {
-            "id": "services",
-            "type": "CREATE-SERVICES",
-            "config": {
-                "sourceComputerName": "{SourceComputerName}",
-                "filter": {
-                    "accountPattern": "*svc_*",
-                    "names": ["ServizioBatch"]
-                },
-                "credentials": {
-                    "DOMINIO\\svc_batch": "{ServicePassword}"
-                }
-            }
-        }
+        [DarkGray]Esempio di step YAML:[/]
+        id: services
+        type: CREATE-SERVICES
+        config:
+          sourceComputerName: '{SourceComputerName}'
+          filter:
+            accountPattern: '*svc_*'
+            names: [ServizioBatch]
+          credentials:
+            'DOMINIO\svc_batch': '{ServicePassword}'
         """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e selezione");

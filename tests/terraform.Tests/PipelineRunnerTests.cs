@@ -17,15 +17,7 @@ public sealed class PipelineRunnerTests : IDisposable
     {
         var first = new FakeAction("first");
         var second = new FakeAction("second");
-        var pipeline = PipelineLoader.Parse("""
-            {
-              "variables": { "RootDir": "D:\\data" },
-              "pipeline": [
-                { "id": "a", "type": "first",  "config": { "path": "{RootDir}\\one" } },
-                { "id": "b", "type": "second", "config": { "path": "{RootDir}\\two" } }
-              ]
-            }
-            """);
+        var pipeline = PipelineLoader.Parse("variables:\n  RootDir: 'D:\\data'\npipeline:\n  - id: a\n    type: first\n    config:\n      path: '{RootDir}\\one'\n  - id: b\n    type: second\n    config:\n      path: '{RootDir}\\two'");
 
         var result = await Runner(first, second).RunAsync(pipeline, dryRun: false);
 
@@ -39,11 +31,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task Skips_disabled_steps_even_when_their_type_is_unknown()
     {
         var action = new FakeAction("known");
-        var pipeline = PipelineLoader.Parse("""
-            { "pipeline": [
-                { "id": "a", "type": "future-action", "enabled": false },
-                { "id": "b", "type": "known" } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: future-action\n    enabled: false\n  - id: b\n    type: known");
 
         var result = await Runner(action).RunAsync(pipeline, dryRun: false);
 
@@ -57,9 +45,7 @@ public sealed class PipelineRunnerTests : IDisposable
     {
         var failing = new FakeAction("fail", (_, _) => Task.FromResult(new ActionResult(false, "boom")));
         var later = new FakeAction("later");
-        var pipeline = PipelineLoader.Parse("""
-            { "pipeline": [ { "id": "a", "type": "fail" }, { "id": "b", "type": "later" } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: fail\n  - id: b\n    type: later");
 
         var result = await Runner(failing, later).RunAsync(pipeline, dryRun: false);
 
@@ -73,7 +59,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task An_unexpected_exception_becomes_a_failed_step()
     {
         var crashing = new FakeAction("crash", (_, _) => throw new InvalidOperationException("kaput"));
-        var pipeline = PipelineLoader.Parse("""{ "pipeline": [ { "id": "a", "type": "crash" } ] }""");
+            var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: crash");
 
         var result = await Runner(crashing).RunAsync(pipeline, dryRun: false);
 
@@ -85,7 +71,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task A_config_error_keeps_its_message_without_the_exception_type()
     {
         var action = new FakeAction("bad", (_, _) => throw new ActionConfigException("paths: valore mancante"));
-        var pipeline = PipelineLoader.Parse("""{ "pipeline": [ { "id": "a", "type": "bad" } ] }""");
+            var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: bad");
 
         var result = await Runner(action).RunAsync(pipeline, dryRun: false);
 
@@ -96,14 +82,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task An_invalid_pipeline_runs_nothing_and_reports_every_problem()
     {
         var action = new FakeAction("known");
-        var pipeline = PipelineLoader.Parse("""
-            { "variables": { "A": "1" },
-              "pipeline": [
-                { "id": "dup", "type": "known" },
-                { "id": "dup", "type": "known", "config": { "p": "{Nope}" } },
-                { "id": "x", "type": "unknown" },
-                { "type": "known" } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("variables:\n  A: '1'\npipeline:\n  - id: dup\n    type: known\n  - id: dup\n    type: known\n    config:\n      p: '{Nope}'\n  - id: x\n    type: unknown\n  - type: known");
 
         var result = await Runner(action).RunAsync(pipeline, dryRun: false);
 
@@ -119,7 +98,7 @@ public sealed class PipelineRunnerTests : IDisposable
     [Fact]
     public async Task An_empty_pipeline_is_invalid()
     {
-        var result = await Runner().RunAsync(PipelineLoader.Parse("""{ "pipeline": [] }"""), dryRun: false);
+        var result = await Runner().RunAsync(PipelineLoader.Parse("pipeline: []"), dryRun: false);
 
         Assert.False(result.Success);
         Assert.Contains(result.ValidationErrors, e => e.Contains("non contiene step"));
@@ -137,9 +116,7 @@ public sealed class PipelineRunnerTests : IDisposable
             return new ActionResult(true);
         });
         var later = new FakeAction("later");
-        var pipeline = PipelineLoader.Parse("""
-            { "pipeline": [ { "id": "a", "type": "wait" }, { "id": "b", "type": "later" } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: wait\n  - id: b\n    type: later");
 
         var run = Runner(waiting, later).RunAsync(pipeline, dryRun: false, cts.Token);
         await started.Task;
@@ -156,9 +133,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task The_dry_run_flag_and_the_declared_per_file_tokens_reach_the_action()
     {
         var action = new FakeAction("batch", null, "FilePath");
-        var pipeline = PipelineLoader.Parse("""
-            { "pipeline": [ { "id": "a", "type": "batch", "config": { "args": "/s {FilePath}" } } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: batch\n    config:\n      args: '/s {FilePath}'");
 
         var result = await Runner(action).RunAsync(pipeline, dryRun: true);
 
@@ -172,9 +147,7 @@ public sealed class PipelineRunnerTests : IDisposable
     public async Task A_per_file_token_in_an_action_that_does_not_declare_it_is_a_preflight_error()
     {
         var action = new FakeAction("plain");
-        var pipeline = PipelineLoader.Parse("""
-            { "pipeline": [ { "id": "a", "type": "plain", "config": { "path": "{FilePath}" } } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("pipeline:\n  - id: a\n    type: plain\n    config:\n      path: '{FilePath}'");
 
         var result = await Runner(action).RunAsync(pipeline, dryRun: false);
 
@@ -186,9 +159,7 @@ public sealed class PipelineRunnerTests : IDisposable
     [Fact]
     public async Task Variable_errors_are_reported_together_with_step_errors()
     {
-        var pipeline = PipelineLoader.Parse("""
-            { "variables": { "FileName": "x" }, "pipeline": [ { "id": "a", "type": "missing" } ] }
-            """);
+        var pipeline = PipelineLoader.Parse("variables:\n  FileName: x\npipeline:\n  - id: a\n    type: missing");
 
         var result = await Runner().RunAsync(pipeline, dryRun: false);
 

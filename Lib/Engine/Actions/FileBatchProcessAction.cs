@@ -37,30 +37,26 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
     {
         ConsolePlus.Write("""
                 [Cyan]FILE-BATCH-PROCESS[/] - Esegue un comando per ogni file selezionato, con parallelismo limitato.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "batch", // Obbligatorio e univoco.
-                    "type": "FILE-BATCH-PROCESS", // Obbligatorio.
-                    "name": "Batch", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "searchPaths": ["D:\\dll"], // Obbligatorio: almeno una cartella completa.
-                        "command": "regsvr32.exe", // Obbligatorio: programma, senza shell implicita.
-                        "arguments": "/s \"{FilePath}\"", // Opzionale, default vuoto.
-                        "recurse": false, // Opzionale, default false.
-                        "maxConcurrency": 16, // Opzionale, default numero di CPU, minimo 1.
-                        "filter": { // Opzionale: se omesso seleziona tutti i file.
-                            "pattern": "*.dll", // Opzionale: pattern sul nome del file.
-                            "matchType": "Glob", // Opzionale, default Auto: Auto, Fixed, Glob o Regex.
-                            "ignoreCase": true, // Opzionale, default true.
-                            "matchFullPath": false, // Opzionale, default false.
-                            "dateAfter": "30d", // Opzionale: data minima, relativa o assoluta.
-                            "dateBefore": "1h", // Opzionale: data massima; suffissi :m/:c/:a = modifica/creazione/accesso.
-                            "minSize": "1k", // Opzionale: dimensione minima (byte, k, m, g, t).
-                            "maxSize": "5m" // Opzionale: dimensione massima.
-                        }
-                    }
-                }
+                [DarkGray]Esempio di step YAML:[/]
+                id: batch # Obbligatorio e univoco.
+                type: FILE-BATCH-PROCESS # Obbligatorio.
+                name: Batch # Opzionale: etichetta per i log.
+                enabled: true # Opzionale, default true.
+                config:
+                  searchPaths: ['D:\dll'] # Obbligatorio: almeno una cartella completa.
+                  command: regsvr32.exe # Obbligatorio: programma, senza shell implicita.
+                  arguments: '/s "{FilePath}"' # Opzionale, default vuoto.
+                  recurse: false # Opzionale, default false.
+                  maxConcurrency: 16 # Opzionale, default numero di CPU, minimo 1.
+                  filter: # Opzionale: se omesso seleziona tutti i file.
+                    pattern: '*.dll' # Opzionale: pattern sul nome del file.
+                    matchType: Glob # Opzionale, default Auto: Auto, Fixed, Glob o Regex.
+                    ignoreCase: true # Opzionale, default true.
+                    matchFullPath: false # Opzionale, default false.
+                    dateAfter: 30d # Opzionale: data minima, relativa o assoluta.
+                    dateBefore: 1h # Opzionale: data massima; suffissi :m/:c/:a = modifica/creazione/accesso.
+                    minSize: 1k # Opzionale: dimensione minima (byte, k, m, g, t).
+                    maxSize: 5m # Opzionale: dimensione massima.
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e token");

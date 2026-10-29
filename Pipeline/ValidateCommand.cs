@@ -10,7 +10,7 @@ namespace terraform.Pipeline;
 /// <summary>Unico argomento del controllo statico: il file della pipeline.</summary>
 public sealed class ValidateSettings : CommandSettings
 {
-    [Description("File pipeline.json da validare senza eseguire azioni o interrogare server")]
+    [Description("File pipeline.yaml da validare senza eseguire azioni o interrogare server")]
     [CommandArgument(0, "<PIPELINE>")]
     public string PipelinePath { get; init; } = "";
 
@@ -27,7 +27,7 @@ public sealed class ValidateCommand : AsyncCommand<ValidateSettings>
     protected override Task<int> ExecuteAsync(CommandContext context, ValidateSettings settings, CancellationToken cancellationToken) =>
         ValidatePipelineAsync(settings.PipelinePath, cancellationToken);
 
-    /// <summary>Carica il solo JSON e restituisce 0 se valido, 1 per errori e 130 su annullamento.</summary>
+    /// <summary>Carica il solo YAML e restituisce 0 se valido, 1 per errori e 130 su annullamento.</summary>
     public static async Task<int> ValidatePipelineAsync(string path, CancellationToken cancellationToken = default)
     {
         try

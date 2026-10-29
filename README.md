@@ -18,12 +18,12 @@ Dalla root del repository:
 dotnet build
 ```
 
-Copia `Pipeline/pipeline.sample.json` in un file di lavoro, poi valida la configurazione e verifica il piano prima dell'esecuzione:
+Copia `Pipeline/pipeline.sample.yaml` in un file di lavoro, poi valida la configurazione e verifica il piano prima dell'esecuzione:
 
 ```powershell
-dotnet run -- validate pipeline.json
-dotnet run -- run pipeline.json --dry-run
-dotnet run -- run pipeline.json
+dotnet run -- validate pipeline.yaml
+dotnet run -- run pipeline.yaml --dry-run
+dotnet run -- run pipeline.yaml
 ```
 
 Per pubblicare l'applicazione:
@@ -33,15 +33,15 @@ dotnet publish -c Release -r win-x64
 ```
 # Pipeline engine
 
-Terraform esegue pipeline descritte in file JSON, step dopo step, con azioni generiche e configurabili.
+Terraform esegue pipeline descritte in file YAML, step dopo step, con azioni generiche e configurabili. Sono accettate le estensioni `.yaml` e `.yml`; i file `.json` non sono piu' supportati.
 
 ```powershell
-terraform validate pipeline.json      # solo configurazione, senza azioni ne' query al server
-terraform run pipeline.json --dry-run   # valida e mostra cosa verrebbe fatto, senza modificare nulla
-terraform run pipeline.json
+terraform validate pipeline.yaml      # solo configurazione, senza azioni ne' query al server
+terraform run pipeline.yaml --dry-run   # valida e mostra cosa verrebbe fatto, senza modificare nulla
+terraform run pipeline.yaml
 ```
 
-Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette commenti e virgole finali.
+Un esempio funzionante è in `Pipeline/pipeline.sample.yaml`. YAML ammette commenti con `#`; non servono virgole finali.
 
 ## Struttura
 
@@ -100,37 +100,31 @@ Un esempio funzionante è in `Pipeline/pipeline.sample.json`. Il file ammette co
 - Nessun servizio/task viene avviato. Primo errore di query o creazione: step fallito e pipeline interrotta; gli elementi gia' creati non vengono annullati.
 - Con `--dry-run` si interroga realmente il server e si elaborano gli elementi selezionati senza crearli. Per i servizi si verificano anche esistenza locale, presenza delle credenziali nella mappa e percorso eseguibile; per i task si controllano credenziali e XML e si prepara in memoria la disabilitazione. I log mostrano nome/percorso, utenza, stato Disabled e, per i task, sovrascrittura degli esistenti; il riepilogo distingue trovati, da creare/registrare e saltati. Non vengono creati file XML temporanei ne' eseguiti comandi di scrittura. La presenza di una password nella mappa non ne verifica la validita' presso Windows; la validazione XML non sostituisce quella completa di Task Scheduler.
 - Richiedono Windows PowerShell, privilegi amministrativi sul target e accesso remoto con l'identita' che esegue terraform: CIM per i servizi, PowerShell Remoting/WinRM e modulo ScheduledTasks per i task. `credentials` riguarda le utenze degli elementi clonati, non l'autenticazione remota.
-- Le password non vengono stampate nei log e non vengono inviate alla query PowerShell; vengono passate a `sc.exe create` o `schtasks.exe /Create`. Gli argomenti dei processi sono ispezionabili da utenti privilegiati: proteggere il JSON della pipeline e non versionare password reali. L'unico file temporaneo e' l'XML del singolo task richiesto da `schtasks.exe`, rimosso anche su errore o annullamento.
+- Le password non vengono stampate nei log e non vengono inviate alla query PowerShell; vengono passate a `sc.exe create` o `schtasks.exe /Create`. Gli argomenti dei processi sono ispezionabili da utenti privilegiati: proteggere il file YAML della pipeline e non versionare password reali. L'unico file temporaneo e' l'XML del singolo task richiesto da `schtasks.exe`, rimosso anche su errore o annullamento.
 
 Esempio (sostituire server, account e password prima dell'uso):
 
-```json
-{
-  "variables": {
-    "SourceComputerName": "SERVER-SORGENTE",
-    "BatchPassword": "DA-SOSTITUIRE"
-  },
-  "pipeline": [
-    {
-      "id": "services",
-      "type": "CREATE-SERVICES",
-      "config": {
-        "sourceComputerName": "{SourceComputerName}",
-        "filter": { "accountPattern": "*svc_*" },
-        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
-      }
-    },
-    {
-      "id": "tasks",
-      "type": "CREATE-TASKS",
-      "config": {
-        "sourceComputerName": "{SourceComputerName}",
-        "filter": { "names": ["\\Batch\\Import", "\\Batch\\Export"] },
-        "credentials": { "DOMINIO\\svc_batch": "{BatchPassword}" }
-      }
-    }
-  ]
-}
+```yaml
+variables:
+  SourceComputerName: SERVER-SORGENTE
+  BatchPassword: DA-SOSTITUIRE
+pipeline:
+  - id: services
+    type: CREATE-SERVICES
+    config:
+      sourceComputerName: '{SourceComputerName}'
+      filter:
+        accountPattern: '*svc_*'
+      credentials:
+        'DOMINIO\svc_batch': '{BatchPassword}'
+  - id: tasks
+    type: CREATE-TASKS
+    config:
+      sourceComputerName: '{SourceComputerName}'
+      filter:
+        names: ['\Batch\Import', '\Batch\Export']
+      credentials:
+        'DOMINIO\svc_batch': '{BatchPassword}'
 ```
 
 Tutti i placeholder `{Nome}` di `variables` si possono usare nei valori stringa delle config; non nei nomi delle proprieta' (quindi neppure nelle chiavi account di `credentials`).

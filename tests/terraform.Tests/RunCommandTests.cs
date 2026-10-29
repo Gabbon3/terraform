@@ -1,4 +1,3 @@
-using System.Text.Json;
 using terraform.lib.logger;
 using terraform.Pipeline;
 
@@ -12,8 +11,8 @@ public sealed class RunCommandTests : IDisposable
 
     private string WritePipeline(object pipeline)
     {
-        var path = _env.Combine("pipeline.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(pipeline));
+        var path = _env.Combine("pipeline.yaml");
+        File.WriteAllText(path, Yaml.Serialize(pipeline));
         return path;
     }
 
@@ -72,11 +71,11 @@ public sealed class RunCommandTests : IDisposable
     public async Task Unknown_action_types_and_missing_or_broken_files_give_exit_code_1()
     {
         var unknown = WritePipeline(new { pipeline = new object[] { new { id = "x", type = "no-such-action" } } });
-        var broken = _env.CreateFile("broken.json", "{ not json");
+        var broken = _env.CreateFile("broken.yaml", "pipeline: [");
 
         Assert.Equal(RunCommand.ExitFailed, await Run(unknown));
         Assert.Equal(RunCommand.ExitFailed, await Run(broken));
-        Assert.Equal(RunCommand.ExitFailed, await Run(_env.Combine("absent.json")));
+        Assert.Equal(RunCommand.ExitFailed, await Run(_env.Combine("absent.yaml")));
     }
 
     [Fact]

@@ -26,16 +26,15 @@ public sealed class EnsureDirectoryAction : IAction
     {
         ConsolePlus.Write("""
                 [Cyan]REQUIRED-FOLDERS[/] - Crea cartelle e genitori mancanti; non modifica quelle esistenti.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "folders", // Obbligatorio e univoco nella pipeline.
-                    "type": "REQUIRED-FOLDERS", // Obbligatorio.
-                    "name": "Cartelle", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "paths": ["D:\\data", "{RootDir}\\logs"] // Obbligatorio: almeno un percorso completo.
-                    }
-                }
+                [DarkGray]Esempio di step YAML:[/]
+                id: folders # Obbligatorio e univoco nella pipeline.
+                type: REQUIRED-FOLDERS # Obbligatorio.
+                name: Cartelle # Opzionale: etichetta per i log.
+                enabled: true # Opzionale, default true.
+                config:
+                  paths: # Obbligatorio: almeno un percorso completo.
+                    - 'D:\data'
+                    - '{RootDir}\logs'
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e comportamento");

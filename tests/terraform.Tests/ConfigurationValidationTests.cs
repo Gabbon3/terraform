@@ -12,9 +12,9 @@ public sealed class ConfigurationValidationTests : IDisposable
 
     public void Dispose() => _env.Dispose();
 
-    /// <summary>Serializza lo stesso formato letto dalla CLI.</summary>
+    /// <summary>Serializza lo stesso formato YAML letto dalla CLI.</summary>
     private static PipelineDefinition Pipeline(params object[] steps) =>
-        PipelineLoader.Parse(JsonSerializer.Serialize(new { pipeline = steps }));
+        PipelineLoader.Parse(Yaml.Serialize(new { pipeline = steps }));
 
     [Theory]
     [InlineData(false)]
@@ -78,19 +78,20 @@ public sealed class ConfigurationValidationTests : IDisposable
                 new { id = "disabled", type = "future-action", enabled = false, config = new { invalid = "{Unknown}" } }
             }
         };
-        var path = _env.CreateFile("pipeline.json", JsonSerializer.Serialize(pipeline));
+        var path = _env.CreateFile("pipeline.yaml", Yaml.Serialize(pipeline));
 
         Assert.Equal(RunCommand.ExitOk, await ValidateCommand.ValidatePipelineAsync(path));
         Assert.False(Directory.Exists(target));
     }
 
     [Theory]
-    [InlineData("""{"searchPaths":["D:\\future"],"command":"tool","filter":{"pattern":"[","matchType":"Regex"}}""", "filter.pattern")]
-    [InlineData("""{"searchPaths":["D:\\future"],"command":"tool","filter":{"minSize":"bad"}}""", "filter.minSize")]
-    [InlineData("""{"searchPaths":["D:\\future"],"command":"tool","maxConcurrency":0}""", "maxConcurrency")]
+    [InlineData("searchPaths: ['D:\\future']\ncommand: tool\nfilter:\n  pattern: '['\n  matchType: Regex", "filter.pattern")]
+    [InlineData("searchPaths: ['D:\\future']\ncommand: tool\nfilter:\n  minSize: bad", "filter.minSize")]
+    [InlineData("searchPaths: ['D:\\future']\ncommand: tool\nmaxConcurrency: 0", "maxConcurrency")]
     public void Preflight_checks_filters_and_constraints_without_enumerating(string config, string field)
     {
-        var pipeline = Pipeline(new { id = "batch", type = "FILE-BATCH-PROCESS", config = Json.Element(config) });
+        var indentedConfig = string.Join(Environment.NewLine, config.Split('\n').Select(line => $"      {line}"));
+        var pipeline = PipelineLoader.Parse($"pipeline:\n  - id: batch\n    type: FILE-BATCH-PROCESS\n    config:\n{indentedConfig}");
         var errors = PipelineRunner.Validate(pipeline, new ActionResolver(ActionCatalog.Create(new FakeProcessRunner())));
 
         Assert.Contains(field, Assert.Single(errors));
@@ -99,9 +100,14 @@ public sealed class ConfigurationValidationTests : IDisposable
     [Fact]
     public async Task Validate_returns_direct_exit_codes_for_errors_and_cancellation()
     {
-        Assert.Equal(RunCommand.ExitFailed, await ValidateCommand.ValidatePipelineAsync(_env.Combine("absent.json")));
-        Assert.Equal(RunCommand.ExitFailed, await ValidateCommand.ValidatePipelineAsync(_env.CreateFile("bad.json", "{")));
-        var invalid = _env.CreateFile("invalid.json", """{"pipeline":[{"id":"x","type":"REQUIRED-FOLDERS","config":{}}]}""");
+                Assert.Equal(RunCommand.ExitFailed, await ValidateCommand.ValidatePipelineAsync(_env.Combine("absent.yaml")));
+                Assert.Equal(RunCommand.ExitFailed, await ValidateCommand.ValidatePipelineAsync(_env.CreateFile("bad.yaml", "pipeline: [")));
+                var invalid = _env.CreateFile("invalid.yaml", """
+                        pipeline:
+                            - id: x
+                                type: REQUIRED-FOLDERS
+                                config: {}
+                        """);
         Assert.Equal(RunCommand.ExitFailed, await ValidateCommand.ValidatePipelineAsync(invalid));
         using var cts = new CancellationTokenSource();
         cts.Cancel();

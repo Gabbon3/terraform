@@ -19,13 +19,13 @@ app.Configure(config =>
 
     config.AddCommand<ValidateCommand>("validate")
         .WithDescription("Valida tutta la configurazione senza eseguire la pipeline")
-        .WithExample("validate", "pipeline.json");
+        .WithExample("validate", "pipeline.yaml");
 
     // Comando Pipeline
     config.AddCommand<RunCommand>("run")
-        .WithDescription("Esegue una pipeline definita in un file JSON")
-        .WithExample("run", "pipeline.json")
-        .WithExample("run", "pipeline.json", "--dry-run");
+        .WithDescription("Esegue una pipeline definita in un file YAML")
+        .WithExample("run", "pipeline.yaml")
+        .WithExample("run", "pipeline.yaml", "--dry-run");
 
     // Comando Migrator
     config.AddCommand<MigratorCommand>("migrator")

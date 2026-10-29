@@ -103,7 +103,7 @@ public sealed class InaccessibleFilesTests : IDisposable
         using var directoryAcl = new DeniedRead(deniedDirectory, directory: true);
         var native = new FakeProcessRunner();
         var later = new FakeAction("later");
-        var pipeline = PipelineLoader.Parse(JsonSerializer.Serialize(new
+        var pipeline = PipelineLoader.Parse(Yaml.Serialize(new
         {
             pipeline = new object[]
             {

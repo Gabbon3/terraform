@@ -185,7 +185,7 @@ public sealed class ExecuteProcessActionTests : IDisposable
     {
         var a = _env.CreateFile(@"inst\a.exe");
         var runner = new FakeProcessRunner();
-        var pipeline = PipelineLoader.Parse(JsonSerializer.Serialize(new
+        var pipeline = PipelineLoader.Parse(Yaml.Serialize(new
         {
             variables = new { Dir = _env.Combine("inst"), Mode = "/quiet" },
             pipeline = new object[]

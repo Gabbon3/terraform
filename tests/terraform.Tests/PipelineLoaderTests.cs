@@ -6,14 +6,15 @@ namespace terraform.Tests;
 public class PipelineLoaderTests
 {
     [Fact]
-    public void Parse_accepts_comments_and_trailing_commas_and_enables_steps_by_default()
+    public void Parse_reads_yaml_and_enables_steps_by_default()
     {
         var pipeline = PipelineLoader.Parse("""
-            {
-              // commento
-              "variables": { "A": "1", },
-              "pipeline": [ { "id": "s1", "type": "t" }, ]
-            }
+            # commento
+            variables:
+              A: '1'
+            pipeline:
+              - id: s1
+                type: t
             """);
 
         Assert.Equal("1", pipeline.Variables!["A"]);
@@ -26,7 +27,12 @@ public class PipelineLoaderTests
     public void Parse_rejects_unknown_properties_so_a_typo_cannot_leave_a_step_enabled()
     {
         var ex = Assert.Throws<PipelineLoadException>(() =>
-            PipelineLoader.Parse("""{"pipeline":[{"id":"s","type":"t","enable":false}]}"""));
+            PipelineLoader.Parse("""
+                pipeline:
+                  - id: s
+                    type: t
+                    enable: false
+                """));
 
         Assert.Contains("enable", ex.Message);
     }
@@ -35,26 +41,41 @@ public class PipelineLoaderTests
     public void Parse_reports_the_line_of_a_syntax_error()
     {
         var ex = Assert.Throws<PipelineLoadException>(() =>
-            PipelineLoader.Parse("{\n  \"pipeline\": [ nope ]\n}", "demo.json"));
+            PipelineLoader.Parse("pipeline:\n  - id: bad: value\n", "demo.yaml"));
 
-        Assert.Contains("demo.json", ex.Message);
+        Assert.Contains("demo.yaml", ex.Message);
+        Assert.Contains("YAML non valido", ex.Message);
         Assert.Contains("riga 2", ex.Message);
     }
 
     [Fact]
     public void Parse_rejects_non_string_variables()
     {
-        Assert.Throws<PipelineLoadException>(() => PipelineLoader.Parse("""{"variables":{"Port":1433},"pipeline":[]}"""));
+                Assert.Throws<PipelineLoadException>(() => PipelineLoader.Parse("""
+                        variables:
+                            Port: 1433
+                        pipeline: []
+                        """));
     }
 
     [Fact]
     public async Task LoadAsync_reports_a_missing_file()
     {
-        var path = Path.Combine(Path.GetTempPath(), "terraform-tests-missing", "p.json");
+        var path = Path.Combine(Path.GetTempPath(), "terraform-tests-missing", "p.yaml");
 
         var ex = await Assert.ThrowsAsync<PipelineLoadException>(() => PipelineLoader.LoadAsync(path));
 
         Assert.Contains(path, ex.Message);
+    }
+
+    [Fact]
+    public async Task LoadAsync_rejects_json_files_without_reading_them()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "pipeline.json");
+
+        var ex = await Assert.ThrowsAsync<PipelineLoadException>(() => PipelineLoader.LoadAsync(path));
+
+        Assert.Contains(".yaml o .yml", ex.Message);
     }
 }
 

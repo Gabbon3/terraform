@@ -15,6 +15,11 @@ internal static class Json
     }
 }
 
+internal static class Yaml
+{
+    public static string Serialize(object value) => new YamlDotNet.Serialization.SerializerBuilder().Build().Serialize(value);
+}
+
 // Cartella temporanea per test, con un Logger che scrive al suo interno.
 internal sealed class TestEnvironment : IDisposable
 {

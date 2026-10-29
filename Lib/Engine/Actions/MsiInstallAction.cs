@@ -39,19 +39,16 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
     {
         ConsolePlus.Write("""
                 [Cyan]MSI-INSTALL[/] - Installa pacchetti MSI in sequenza tramite msiexec.exe.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "frameworks", // Obbligatorio e univoco.
-                    "type": "MSI-INSTALL", // Obbligatorio.
-                    "name": "Frameworks", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "paths": ["D:\\install\\framework.msi"], // Obbligatorio: almeno un percorso completo .msi, in ordine.
-                        "msiArguments": "/i \"{MsiPath}\" /qn /norestart", // Opzionale: questi sono i default; {MsiPath} obbligatorio.
-                        "successExitCodes": [0, 3010], // Opzionale: questi sono i default; lista non vuota.
-                        "ignoreIfNotFound": false // Opzionale, default false; true salta i pacchetti mancanti con Warn.
-                    }
-                }
+                                [DarkGray]Esempio di step YAML:[/]
+                                id: frameworks # Obbligatorio e univoco.
+                                type: MSI-INSTALL # Obbligatorio.
+                                name: Frameworks # Opzionale: etichetta per i log.
+                                enabled: true # Opzionale, default true.
+                                config:
+                                    paths: ['D:\install\framework.msi'] # Obbligatorio: almeno un percorso completo .msi, in ordine.
+                                    msiArguments: '/i "{MsiPath}" /qn /norestart' # Opzionale: questi sono i default; {MsiPath} obbligatorio.
+                                    successExitCodes: [0, 3010] # Opzionale: questi sono i default; lista non vuota.
+                                    ignoreIfNotFound: false # Opzionale, default false; true salta i pacchetti mancanti con Warn.
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e comportamento");

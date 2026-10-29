@@ -122,7 +122,7 @@ public sealed class MsiInstallActionTests : IDisposable
     {
         var a = _env.CreateFile(@"inst\a.msi");
         var runner = new FakeProcessRunner();
-        var pipeline = PipelineLoader.Parse(JsonSerializer.Serialize(new
+        var pipeline = PipelineLoader.Parse(Yaml.Serialize(new
         {
             variables = new { Dir = _env.Combine("inst"), Level = "/qb" },
             pipeline = new object[]
@@ -142,7 +142,7 @@ public sealed class MsiInstallActionTests : IDisposable
     {
         var a = _env.CreateFile(@"inst\a.msi");
         var runner = new FakeProcessRunner();
-        var pipeline = PipelineLoader.Parse(JsonSerializer.Serialize(new
+        var pipeline = PipelineLoader.Parse(Yaml.Serialize(new
         {
             variables = new { MsiPath = a },
             pipeline = new object[] { new { id = "m", type = "MSI-INSTALL", config = new { paths = new[] { a } } } }

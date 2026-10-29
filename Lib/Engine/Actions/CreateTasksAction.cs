@@ -21,21 +21,16 @@ public sealed class CreateTasksAction(IProcessRunner processRunner) : IAction
     {
         ConsolePlus.Write("""
         [Cyan]CREATE-TASKS[/] - Clona task dal server sorgente al computer locale.
-        [DarkGray]Esempio di step (JSON):[/]
-        {
-            "id": "tasks",
-            "type": "CREATE-TASKS",
-            "config": {
-                "sourceComputerName": "{SourceComputerName}",
-                "filter": {
-                    "accountPattern": "*svc_*",
-                    "names": ["\\Batch\\Import"]
-                },
-                "credentials": {
-                    "DOMINIO\\svc_batch": "{ServicePassword}"
-                }
-            }
-        }
+        [DarkGray]Esempio di step YAML:[/]
+        id: tasks
+        type: CREATE-TASKS
+        config:
+          sourceComputerName: '{SourceComputerName}'
+          filter:
+            accountPattern: '*svc_*'
+            names: ['\Batch\Import']
+          credentials:
+            'DOMINIO\svc_batch': '{ServicePassword}'
         """);
         Console.WriteLine();
         ConsolePlus.Write("[Cyan]Configurazione e selezione[/]");

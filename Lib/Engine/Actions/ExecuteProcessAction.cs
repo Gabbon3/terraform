@@ -45,27 +45,21 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
     {
         ConsolePlus.Write("""
                 [Cyan]EXECUTE-PROCESS[/] - Esegue programmi in sequenza; si ferma al primo fallimento.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "software", // Obbligatorio e univoco.
-                    "type": "EXECUTE-PROCESS", // Obbligatorio.
-                    "name": "Software", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "defaultArguments": "/quiet /norestart", // Opzionale, default vuoto.
-                        "defaultSuccessExitCodes": [0, 3010, 1638], // Opzionale: questi sono i default; lista non vuota.
-                        "manualStepsWarning": "Completare i passaggi manuali.", // Opzionale: avviso finale solo su successo.
-                        "items": [ // Obbligatorio: almeno un elemento, eseguiti nell'ordine indicato.
-                            {
-                                "path": "D:\\install\\setup.exe", // Obbligatorio: percorso completo.
-                                "name": "Setup", // Opzionale, default nome del file.
-                                "arguments": "/install /quiet /norestart", // Opzionale: sostituisce defaultArguments, anche se vuoto.
-                                "successExitCodes": [0, 3010], // Opzionale: sostituisce i default; lista non vuota.
-                                "ignoreIfNotFound": false // Opzionale, default false; true salta il file con Warn.
-                            }
-                        ]
-                    }
-                }
+                [DarkGray]Esempio di step YAML:[/]
+                id: software # Obbligatorio e univoco.
+                type: EXECUTE-PROCESS # Obbligatorio.
+                name: Software # Opzionale: etichetta per i log.
+                enabled: true # Opzionale, default true.
+                config:
+                  defaultArguments: '/quiet /norestart' # Opzionale, default vuoto.
+                  defaultSuccessExitCodes: [0, 3010, 1638] # Opzionale: questi sono i default; lista non vuota.
+                  manualStepsWarning: Completare i passaggi manuali. # Opzionale: avviso finale solo su successo.
+                  items: # Obbligatorio: almeno un elemento, eseguiti nell'ordine indicato.
+                    - path: 'D:\install\setup.exe' # Obbligatorio: percorso completo.
+                      name: Setup # Opzionale, default nome del file.
+                      arguments: '/install /quiet /norestart' # Opzionale: sostituisce defaultArguments, anche se vuoto.
+                      successExitCodes: [0, 3010] # Opzionale: sostituisce i default; lista non vuota.
+                      ignoreIfNotFound: false # Opzionale, default false; true salta il file con Warn.
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e comportamento");

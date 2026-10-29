@@ -360,7 +360,7 @@ public sealed class WindowsCloneActionTests : IDisposable
     {
         var runner = Runner([tasks ? ScheduledTask() : Service()], (_, args, _) =>
             Task.FromResult(new ProcessResult(args.StartsWith("query") ? 1060 : 0, "", "")));
-        var definition = PipelineLoader.Parse(JsonSerializer.Serialize(new
+        var definition = PipelineLoader.Parse(Yaml.Serialize(new
         {
             variables = new { SourceComputerName = "SOURCE", Password },
             pipeline = new[] { new { id = "clone", type = tasks ? "CREATE-TASKS" : "CREATE-SERVICES",
@@ -377,7 +377,7 @@ public sealed class WindowsCloneActionTests : IDisposable
     [Fact]
     public async Task Sample_clone_steps_are_disabled()
     {
-        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\Pipeline\pipeline.sample.json"));
+        var path = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\Pipeline\pipeline.sample.yaml"));
         var pipeline = await PipelineLoader.LoadAsync(path);
         Assert.Equal(4, pipeline.Steps!.Count);
         Assert.All(pipeline.Steps.Skip(2), step => Assert.False(step!.Enabled));

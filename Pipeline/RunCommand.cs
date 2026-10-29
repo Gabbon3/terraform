@@ -11,7 +11,7 @@ namespace terraform.Pipeline;
 
 public sealed class RunSettings : CommandSettings
 {
-    [Description("Percorso del file pipeline.json da eseguire")]
+    [Description("Percorso del file pipeline.yaml da eseguire")]
     [CommandArgument(0, "<PIPELINE>")]
     public string PipelinePath { get; init; } = "";
 
@@ -25,7 +25,7 @@ public sealed class RunSettings : CommandSettings
 }
 
 /// <summary>
-/// Comando per eseguire una pipeline definita in un file JSON
+/// Comando per eseguire una pipeline definita in un file YAML
 /// </summary>
 public sealed class RunCommand : AsyncCommand<RunSettings>
 {

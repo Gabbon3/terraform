@@ -33,22 +33,16 @@ public sealed class EditHostsAction : IAction
     {
         ConsolePlus.Write("""
                 [Cyan]HOSTS[/] - Allinea le mappature nel file hosts, senza duplicare gli host.
-                [DarkGray]Esempio di step (JSON con commenti):[/]
-                {
-                    "id": "hosts", // Obbligatorio e univoco.
-                    "type": "HOSTS", // Obbligatorio.
-                    "name": "Hosts", // Opzionale: etichetta per i log.
-                    "enabled": true, // Opzionale, default true.
-                    "config": {
-                        "path": "C:\\Windows\\System32\\drivers\\etc\\hosts", // Opzionale: default hosts di sistema.
-                        "entries": [ // Obbligatorio: almeno una voce.
-                            {
-                                "ip": "127.0.0.1", // Obbligatorio: indirizzo IPv4 o IPv6 valido.
-                                "host": "{SourceServer}" // Obbligatorio, univoco: niente spazi o #.
-                            }
-                        ]
-                    }
-                }
+                [DarkGray]Esempio di step YAML:[/]
+                id: hosts # Obbligatorio e univoco.
+                type: HOSTS # Obbligatorio.
+                name: Hosts # Opzionale: etichetta per i log.
+                enabled: true # Opzionale, default true.
+                config:
+                  path: 'C:\Windows\System32\drivers\etc\hosts' # Opzionale: default hosts di sistema.
+                  entries: # Obbligatorio: almeno una voce.
+                    - ip: 127.0.0.1 # Obbligatorio: indirizzo IPv4 o IPv6 valido.
+                      host: '{SourceServer}' # Obbligatorio, univoco: niente spazi o #.
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
