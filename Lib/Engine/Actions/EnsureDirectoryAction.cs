@@ -15,7 +15,14 @@ public sealed class EnsureDirectoryAction : IAction
 {
     private sealed class Config
     {
-        public List<string>? Paths { get; init; }
+        public List<JsonElement>? Paths { get; init; }
+    }
+
+    private sealed record DirectorySpec
+    {
+        public string? Path { get; init; }
+        public string? Source { get; init; }
+        public int Depth { get; init; }
     }
 
     public string ActionType => "REQUIRED-FOLDERS";
@@ -34,12 +41,17 @@ public sealed class EnsureDirectoryAction : IAction
                 config:
                   paths: # Obbligatorio: almeno un percorso completo.
                     - 'D:\data'
-                    - '{RootDir}\logs'
+                    - path: '{RootDir}\logs'
+                        source: '\\{SourceServer}\D$\logs'
+                        depth: 1
                 """);
         Console.WriteLine();
         ConsolePlus.WriteBoxHeader("Configurazione e comportamento");
         ConsolePlus.WriteList([
             "[Cyan]paths[/]: [Yellow]obbligatorio[/], almeno un percorso completo; crea anche i genitori mancanti.",
+            "Ogni voce puo' essere una stringa oppure un oggetto con [Cyan]path[/], [Cyan]source[/] e [Cyan]depth[/].",
+            "[Cyan]depth[/]: 0 (default) crea solo path; 1 include le sottocartelle immediate; -1 replica tutto l'albero. Per depth diverso da 0 serve source.",
+            "Si replicano solo cartelle, mai file; junction e link simbolici non vengono seguiti. La sorgente viene letta anche in dry-run.",
             "[Magenta]{RootDir}[/]: va definita nelle [Cyan]variables[/] globali della pipeline.",
             "[Green]Cartelle esistenti[/]: lasciate invariate. [Yellow]File omonimo[/]: lo step fallisce prima di creare cartelle.",
             "[Cyan]Dry-run[/]: mostra le cartelle da creare, [Green]senza crearle[/]."
@@ -50,15 +62,46 @@ public sealed class EnsureDirectoryAction : IAction
     public void Validate(JsonElement config) => ReadPaths(config);
 
     /// <summary>Normalizza i percorsi senza verificarne l'esistenza, condividendo la validazione con il preflight.</summary>
-    private static List<string> ReadPaths(JsonElement config)
+    private static List<DirectorySpec> ReadPaths(JsonElement config)
     {
         var settings = ActionConfig.Read<Config>(config);
         if (settings.Paths is not { Count: > 0 })
         {
             throw new ActionConfigException("paths: serve almeno un percorso");
         }
-        return settings.Paths.Select((path, i) =>
-            Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(path, $"paths[{i}]"))).ToList();
+        return settings.Paths.Select((entry, index) =>
+        {
+            var field = $"paths[{index}]";
+            DirectorySpec spec;
+            if (entry.ValueKind == JsonValueKind.String)
+            {
+                spec = new DirectorySpec { Path = entry.GetString() };
+            }
+            else if (entry.ValueKind == JsonValueKind.Object)
+            {
+                try
+                {
+                    spec = ActionConfig.Read<DirectorySpec>(entry);
+                }
+                catch (ActionConfigException ex)
+                {
+                    throw new ActionConfigException($"{field}: {ex.Message}");
+                }
+            }
+            else
+            {
+                throw new ActionConfigException($"{field}: serve un percorso o un oggetto con path, source e depth");
+            }
+
+            if (spec.Depth < -1)
+                throw new ActionConfigException($"{field}.depth: deve essere -1 oppure maggiore o uguale a 0");
+
+            var target = Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(spec.Path, $"{field}.path"));
+            var source = spec.Source is not null || spec.Depth != 0
+                ? Path.TrimEndingDirectorySeparator(ActionConfig.FullPath(spec.Source, $"{field}.source"))
+                : null;
+            return spec with { Path = target, Source = source };
+        }).ToList();
     }
 
     /// <summary>Valida tutti i percorsi, poi crea quelli mancanti; in dry-run si limita a loggare cosa creerebbe.</summary>
@@ -75,15 +118,19 @@ public sealed class EnsureDirectoryAction : IAction
 
         for (var i = 0; i < paths.Count; i++)
         {
-            var path = paths[i];
-
-            if (File.Exists(path))
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var spec = paths[i];
+            foreach (var path in EnumerateTargets(spec))
             {
-                errors.Add($"paths[{i}]: esiste un file con questo nome: {path}");
-            }
-            else if (seen.Add(path))
-            {
-                targets.Add(path);
+                context.CancellationToken.ThrowIfCancellationRequested();
+                if (File.Exists(path))
+                {
+                    errors.Add($"paths[{i}]: esiste un file con questo nome: {path}");
+                }
+                else if (seen.Add(path))
+                {
+                    targets.Add(path);
+                }
             }
         }
 
@@ -120,5 +167,24 @@ public sealed class EnsureDirectoryAction : IAction
 
         var verb = context.IsDryRun ? "da creare" : "create";
         return Task.FromResult(new ActionResult(true, $"{created} {verb}, {existing} già presenti"));
+    }
+
+    private static IEnumerable<string> EnumerateTargets(DirectorySpec spec)
+    {
+        yield return spec.Path!;
+        if (spec.Depth == 0)
+            yield break;
+
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            MaxRecursionDepth = spec.Depth == -1 ? int.MaxValue : spec.Depth - 1,
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = false
+        };
+        foreach (var directory in Directory.EnumerateDirectories(spec.Source!, "*", options))
+        {
+            yield return Path.Combine(spec.Path!, Path.GetRelativePath(spec.Source!, directory));
+        }
     }
 }

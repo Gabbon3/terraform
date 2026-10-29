@@ -56,6 +56,19 @@ Un esempio funzionante è in `Pipeline/pipeline.sample.yaml`. YAML ammette comme
 ## Azioni
 
 **`REQUIRED-FOLDERS`**: crea le cartelle di `paths` (anche i genitori). Idempotente; fallisce se esiste un file con lo stesso nome.
+- Ogni voce di `paths` puo' essere un percorso stringa oppure un oggetto con `path` (destinazione), `source` e `depth`.
+- `depth: 0` (default): crea solo `path`, senza leggere la sorgente. `depth: 1`: crea anche le sottocartelle immediate di `source`; valori maggiori includono altrettanti livelli. `depth: -1`: replica tutto l'albero delle cartelle. Altri valori negativi non sono ammessi.
+- Per `depth` diverso da 0, `source` e' obbligatorio e deve essere un percorso completo. Non si copiano file, non si cancellano cartelle esistenti e non si seguono junction o link simbolici. La sorgente deve essere accessibile a runtime, anche in dry-run; `validate` non la interroga. Tutti i percorsi da creare sono raccolti e controllati prima della prima creazione.
+
+```yaml
+type: REQUIRED-FOLDERS
+config:
+  paths:
+    - 'D:\elaborazioni'
+    - path: 'D:\Gruppotesi\dll_euritmo\Logs'
+      source: '\\{SourceServer}\D$\Gruppotesi\dll_euritmo\Logs'
+      depth: 1
+```
 
 **`FILE-BATCH-PROCESS`**: esegue un comando per ogni file trovato.
 - `searchPaths` (obbligatorio), `recurse` (default `false`), `maxConcurrency` (default: numero di CPU), `command`, `arguments`.
