@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Configuratore pipeline Terraform</title>
+  <style>/*__TAILWIND_CSS__*/</style>
+</head>
+<body>
+  <main class="mx-auto max-w-7xl p-3 sm:p-6">
+    <header class="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-xl font-bold">Configuratore pipeline</h1>
+        <p class="text-sm text-slate-600">Crea e modifica YAML localmente. Il browser non esegue Terraform.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button id="undo" class="rounded border bg-white px-3 py-2 text-sm hover:bg-slate-50" title="Ctrl+Z">Annulla</button>
+        <button id="redo" class="rounded border bg-white px-3 py-2 text-sm hover:bg-slate-50" title="Ctrl+Maiusc+Z">Ripristina</button>
+        <label class="rounded border bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50">
+          Importa YAML<input id="import-file" type="file" accept=".yaml,.yml,text/yaml" class="sr-only">
+        </label>
+        <button id="download" class="rounded bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800">Scarica YAML</button>
+      </div>
+    </header>
+    <div id="notice" role="status" class="mb-3 hidden rounded border p-3 text-sm"></div>
+    <div id="readonly-warning" role="alert" class="mb-3 hidden rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-950"></div>
+    <div class="workspace grid grid-cols-[minmax(13rem,18rem)_minmax(0,1fr)] gap-4">
+      <aside class="steps rounded-lg border bg-white p-3">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="font-semibold">Step</h2>
+          <button id="add-step" class="rounded bg-blue-700 px-2.5 py-1.5 text-sm text-white">Aggiungi</button>
+        </div>
+        <ol id="step-list" class="grid gap-2"></ol>
+      </aside>
+      <section class="min-w-0">
+        <div id="empty-editor" class="rounded-lg border bg-white p-6 text-sm text-slate-600">Seleziona o aggiungi uno step.</div>
+        <div id="editor" class="hidden rounded-lg border bg-white p-4"></div>
+        <section class="mt-4 rounded-lg border bg-white">
+          <div class="flex flex-wrap items-center justify-between gap-3 p-3">
+            <details id="yaml-details" class="min-w-0 flex-1">
+              <summary class="cursor-pointer text-sm font-semibold">Anteprima YAML</summary>
+              <pre id="yaml-preview" class="mt-3 max-h-96 overflow-auto border-t bg-slate-950 p-3 text-xs text-slate-100"></pre>
+            </details>
+            <div class="flex items-center gap-2">
+              <span id="preview-status" aria-live="polite" class="text-xs text-slate-500"></span>
+              <button id="refresh-preview" type="button" class="rounded border px-3 py-2 text-sm hover:bg-slate-50">Aggiorna anteprima</button>
+            </div>
+          </div>
+        </section>
+        <section class="mt-3 rounded-lg border bg-white p-3">
+          <h2 class="mb-2 text-sm font-semibold">Variabili pipeline</h2>
+          <div id="variables-editor" class="grid gap-2"></div>
+          <button id="add-variable" class="mt-2 rounded border px-2.5 py-1.5 text-sm hover:bg-slate-50">Aggiungi variabile</button>
+        </section>
+      </section>
+    </div>
+    <p class="mt-4 text-xs text-slate-500">I valori sensibili restano solo in memoria. Nessun salvataggio automatico, upload o telemetria. Verifica il file finale con <code>terraform validate</code>.</p>
+  </main>
+  <script id="action-schema" type="application/json">/*__ACTION_SCHEMA__*/</script>
+  <script>/*__APP_JS__*/</script>
+</body>
+</html>

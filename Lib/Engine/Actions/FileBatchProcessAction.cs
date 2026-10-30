@@ -14,6 +14,8 @@ namespace terraform.lib.engine.actions;
 /// In <c>arguments</c> si possono usare <c>{FilePath}</c>, <c>{FileName}</c> e <c>{Directory}</c>, risolti per ogni file.
 /// Tutti i file vengono elaborati anche se alcuni falliscono; lo step fallisce se almeno un comando esce con codice diverso da 0.
 /// </remarks>
+[ActionMetadata("Seleziona file e avvia un programma per ciascuno, con parallelismo limitato.")]
+[ActionConfig(typeof(FileBatchProcessAction.Config))]
 public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IAction
 {
     private const int MaxLoggedFailures = 20;
@@ -21,11 +23,17 @@ public sealed class FileBatchProcessAction(IProcessRunner processRunner) : IActi
 
     private sealed class Config
     {
+        [ConfigField("Cartelle complete da esaminare.", Required = true, Widget = "path")]
         public List<string>? SearchPaths { get; init; }
+        [ConfigField("Include i file nelle sottocartelle.", DefaultJson = "false")]
         public bool Recurse { get; init; }
+        [ConfigField("Numero massimo di processi paralleli; se omesso usa il numero di CPU.", Minimum = 1)]
         public int? MaxConcurrency { get; init; }
+        [ConfigField("Criteri facoltativi per selezionare i file.")]
         public FileFilterConfig? Filter { get; init; }
+        [ConfigField("Programma da avviare per ogni file.", Required = true)]
         public string? Command { get; init; }
+        [ConfigField("Argomenti del programma; supporta i token per-file documentati nell'azione.", DefaultJson = "\"\"")]
         public string? Arguments { get; init; }
     }
 

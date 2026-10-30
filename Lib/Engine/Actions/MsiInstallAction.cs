@@ -14,6 +14,8 @@ namespace terraform.lib.engine.actions;
 /// Lo risolve quest'azione per ogni pacchetto e solo in <c>msiArguments</c>, mentre gli altri placeholder sono già risolti dal runner.
 /// Rispetto a un exe, qui 1638 (già installato) non è un successo.
 /// </remarks>
+[ActionMetadata("Installa in sequenza pacchetti MSI usando msiexec.exe.")]
+[ActionConfig(typeof(MsiInstallAction.Config))]
 public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
 {
     private const string DefaultArguments = "/i \"{MsiPath}\" /qn /norestart";
@@ -25,9 +27,13 @@ public sealed class MsiInstallAction(IProcessRunner processRunner) : IAction
 
     private sealed class Config
     {
+        [ConfigField("Percorsi completi dei pacchetti MSI da installare in ordine.", Required = true, Widget = "path")]
         public List<string>? Paths { get; init; }
+        [ConfigField("Argomenti per msiexec; deve includere il token {MsiPath}.", DefaultJson = "\"/i \\\"{MsiPath}\\\" /qn /norestart\"")]
         public string? MsiArguments { get; init; }
+        [ConfigField("Codici di uscita accettati.", DefaultJson = "[0,3010]")]
         public List<int>? SuccessExitCodes { get; init; }
+        [ConfigField("Salta i pacchetti mancanti.", DefaultJson = "false")]
         public bool IgnoreIfNotFound { get; init; }
     }
 

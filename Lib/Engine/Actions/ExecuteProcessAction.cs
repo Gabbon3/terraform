@@ -15,6 +15,8 @@ namespace terraform.lib.engine.actions;
 /// Gli argomenti di un item, anche vuoti, hanno la precedenza su <c>defaultArguments</c>; lo stesso vale per i codici di uscita.
 /// I placeholder <c>{Nome}</c> sono già risolti dal runner prima dell'esecuzione.
 /// </remarks>
+[ActionMetadata("Esegue programmi o installer in sequenza con argomenti e codici di successo configurabili.")]
+[ActionConfig(typeof(ExecuteProcessAction.Config))]
 public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
 {
     // 3010 = riavvio richiesto, 1638 = versione già installata: per un installer sono esiti accettabili.
@@ -22,18 +24,27 @@ public sealed class ExecuteProcessAction(IProcessRunner processRunner) : IAction
 
     private sealed class Config
     {
+        [ConfigField("Programmi da eseguire in sequenza.", Required = true)]
         public List<ItemConfig?>? Items { get; init; }
+        [ConfigField("Argomenti usati quando l'elemento non specifica i propri.", DefaultJson = "\"\"")]
         public string? DefaultArguments { get; init; }
+        [ConfigField("Codici di uscita considerati riusciti quando non sovrascritti dall'elemento.", DefaultJson = "[0,3010,1638]")]
         public List<int>? DefaultSuccessExitCodes { get; init; }
+        [ConfigField("Avviso mostrato se l'intera sequenza riesce.")]
         public string? ManualStepsWarning { get; init; }
     }
 
     private sealed class ItemConfig
     {
+        [ConfigField("Etichetta facoltativa dell'elemento.")]
         public string? Name { get; init; }
+        [ConfigField("Percorso completo del programma.", Required = true, Widget = "path")]
         public string? Path { get; init; }
+        [ConfigField("Argomenti; se omesso usa defaultArguments, mentre una stringa vuota lo sostituisce.", DefaultJson = "\"\"")]
         public string? Arguments { get; init; }
+        [ConfigField("Codici di uscita accettati; se omesso usa i default dell'azione.")]
         public List<int>? SuccessExitCodes { get; init; }
+        [ConfigField("Salta il programma se il file non esiste.", DefaultJson = "false")]
         public bool IgnoreIfNotFound { get; init; }
     }
 

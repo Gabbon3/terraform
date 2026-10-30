@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <HtmlConfiguratorRoot>$(MSBuildProjectDirectory)\html-configurator</HtmlConfiguratorRoot>
+    <HtmlConfiguratorSchema>$(HtmlConfiguratorRoot)\dist\actions.schema.json</HtmlConfiguratorSchema>
+    <HtmlConfiguratorFile>$(HtmlConfiguratorRoot)\dist\terraform-configurator.html</HtmlConfiguratorFile>
+  </PropertyGroup>
+
+  <Target Name="BuildHtmlConfigurator"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingHtmlConfigurator)' != 'true'">
+    <Exec Command="dotnet run --project &quot;$(HtmlConfiguratorRoot)\SchemaGenerator\SchemaGenerator.csproj&quot; --configuration &quot;$(Configuration)&quot; -- &quot;$(TargetPath)&quot; &quot;$(HtmlConfiguratorSchema)&quot;" />
+    <Exec Command="npm --prefix &quot;$(HtmlConfiguratorRoot)&quot; run build -- &quot;$(HtmlConfiguratorSchema)&quot;" />
+    <Copy SourceFiles="$(HtmlConfiguratorFile)" DestinationFiles="$(TargetDir)terraform-configurator.html" />
+  </Target>
+
+  <Target Name="CopyHtmlConfiguratorToPublish"
+          AfterTargets="Publish"
+          Condition="Exists('$(HtmlConfiguratorFile)')">
+    <Copy SourceFiles="$(HtmlConfiguratorFile)" DestinationFiles="$(PublishDir)terraform-configurator.html" />
+  </Target>
+</Project>

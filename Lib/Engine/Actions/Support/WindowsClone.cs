@@ -7,10 +7,13 @@ namespace terraform.lib.engine.actions;
 internal sealed class WindowsCloneConfig
 {
     /// <summary>Server da interrogare con l'identita' del processo terraform, non con le credenziali degli elementi.</summary>
+    [ConfigField("Server remoto da cui clonare servizi o task.", Required = true)]
     public string? SourceComputerName { get; init; }
     /// <summary>Selezione opzionale; omettere il filtro seleziona tutti gli elementi remoti.</summary>
+    [ConfigField("Filtri facoltativi applicati in AND.")]
     public WindowsCloneFilter? Filter { get; init; }
     /// <summary>Mappa account/password per la creazione locale; dopo la validazione ignora il case degli account.</summary>
+    [ConfigField("Mappa di account e password; le password restano sensibili.", Required = true, Sensitive = true, Widget = "map")]
     public Dictionary<string, string?>? Credentials { get; init; }
 }
 
@@ -18,8 +21,10 @@ internal sealed class WindowsCloneConfig
 internal sealed class WindowsCloneFilter
 {
     /// <summary>Wildcard PowerShell applicata a StartName dei servizi o Principal.UserId dei task.</summary>
+    [ConfigField("Wildcard facoltativa per l'account di servizio o del task.")]
     public string? AccountPattern { get; init; }
     /// <summary>Nomi esatti; per i task sono ammessi anche i percorsi completi per distinguere le omonimie.</summary>
+    [ConfigField("Nomi esatti facoltativi; per i task è ammesso anche il percorso completo.")]
     public List<string>? Names { get; init; }
 }
 

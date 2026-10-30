@@ -1,0 +1,16 @@
+{
+  "name": "terraform-html-configurator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "esbuild": "0.25.11",
+    "tailwindcss": "3.4.18",
+    "yaml": "2.8.1"
+  }
+}

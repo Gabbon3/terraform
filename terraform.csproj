@@ -26,4 +26,10 @@
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="html-configurator\**\*.cs" />
+    <Compile Include="html-configurator\Metadata\**\*.cs" />
+  </ItemGroup>
+  <Import Project="html-configurator/build/Configurator.targets" Condition="Exists('html-configurator/build/Configurator.targets')" />
+
 </Project>

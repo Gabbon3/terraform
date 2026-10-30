@@ -5,21 +5,29 @@ namespace terraform.lib.engine.actions;
 /// <summary>Sezione JSON "filter" riusabile da qualunque azione che selezioni file.</summary>
 public sealed class FileFilterConfig
 {
+    [ConfigField("Pattern facoltativo per selezionare i file.")]
     public string? Pattern { get; init; }
 
     // Auto non riconosce le regex: un pattern con * o ? diventa Glob, altrimenti Fixed (sottostringa).
+    [ConfigField("Interpretazione del pattern.", DefaultJson = "\"Auto\"")]
     public PatternMatchType MatchType { get; init; } = PatternMatchType.Auto;
 
+    [ConfigField("Ignora maiuscole e minuscole.", DefaultJson = "true")]
     public bool IgnoreCase { get; init; } = true;
 
+    [ConfigField("Applica il pattern al percorso completo anziché al solo nome file.", DefaultJson = "false")]
     public bool MatchFullPath { get; init; }
 
+    [ConfigField("Data minima; supporta date relative o assolute.")]
     public string? DateAfter { get; init; }
 
+    [ConfigField("Data massima; supporta date relative o assolute.")]
     public string? DateBefore { get; init; }
 
+    [ConfigField("Dimensione minima (byte o suffissi k, m, g, t).")]
     public string? MinSize { get; init; }
 
+    [ConfigField("Dimensione massima (byte o suffissi k, m, g, t).")]
     public string? MaxSize { get; init; }
 
     /// <returns>Il filtro, oppure null se la config non pone restrizioni.</returns>

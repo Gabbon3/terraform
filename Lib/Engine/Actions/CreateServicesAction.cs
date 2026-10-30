@@ -9,6 +9,8 @@ namespace terraform.lib.engine.actions;
 /// <summary>Clona servizi Windows remoti sul computer locale, mantenendo comando e utenza originali.</summary>
 /// <param name="processRunner">Runner per query PowerShell in streaming e comandi sc.exe locali.</param>
 /// <remarks>Non aggiorna i servizi esistenti e non avvia quelli nuovi, creati sempre con startup Disabled.</remarks>
+[ActionMetadata("Clona servizi Windows remoti, disabilitati e con le credenziali configurate.")]
+[ActionConfig(typeof(WindowsCloneConfig))]
 public sealed class CreateServicesAction(IProcessRunner processRunner) : IAction
 {
     public string ActionType => "CREATE-SERVICES";

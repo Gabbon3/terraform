@@ -6,6 +6,8 @@ using terraform.lib.logger;
 
 namespace terraform.lib.engine.actions;
 
+[ActionMetadata("Allinea le mappature hostname/IP nel file hosts locale.")]
+[ActionConfig(typeof(EditHostsAction.Config))]
 public sealed class EditHostsAction : IAction
 {
     /// <summary>
@@ -14,14 +16,18 @@ public sealed class EditHostsAction : IAction
     private sealed class Config
     {
         [JsonPropertyName("path")]
+        [ConfigField("Percorso del file hosts; se omesso usa quello di sistema.", Widget = "path")]
         public string? HostsPath { get; init; }
 
+        [ConfigField("Mappature IP e hostname da allineare.", Required = true)]
         public List<EntryConfig?>? Entries { get; init; }
     }
 
     private sealed class EntryConfig
     {
+        [ConfigField("Indirizzo IPv4 o IPv6.", Required = true)]
         public string? Ip { get; init; }
+        [ConfigField("Nome host univoco, senza spazi o caratteri #.", Required = true)]
         public string? Host { get; init; }
     }
 

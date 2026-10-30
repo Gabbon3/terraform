@@ -11,6 +11,8 @@ namespace terraform.lib.engine.actions;
 /// <summary>Clona task schedulati remoti sul computer locale conservando cartella, definizione XML e utenza.</summary>
 /// <param name="processRunner">Runner per query PowerShell in streaming e registrazione locale con schtasks.exe.</param>
 /// <remarks>I task esistenti vengono sovrascritti; tutti i task registrati restano disabilitati a livello generale.</remarks>
+[ActionMetadata("Clona task schedulati remoti, disabilitati e con le credenziali configurate.")]
+[ActionConfig(typeof(WindowsCloneConfig))]
 public sealed class CreateTasksAction(IProcessRunner processRunner) : IAction
 {
     public string ActionType => "CREATE-TASKS";

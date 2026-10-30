@@ -11,26 +11,37 @@ public sealed class RobocopyConfig
     public const string DefaultCopyOptions = "/COPYALL /B /DCOPY:DAT";
 
     // Una cartella o un singolo file; per un file la destinazione è il percorso completo del file copiato.
+    [ConfigField("Percorso completo della sorgente di file o cartella.", Required = true, Widget = "path")]
     public string? Source { get; init; }
+    [ConfigField("Percorso completo di destinazione; per una sorgente file include il nome del file.", Required = true, Widget = "path")]
     public string? Destination { get; init; }
 
     // Solo per sorgenti cartella.
+    [ConfigField("Filtri dei file da includere; omesso copia tutti i file.")]
     public List<string>? Files { get; init; }
+    [ConfigField("Cartelle da escludere.")]
     public List<string>? ExcludeDirs { get; init; }
+    [ConfigField("File da escludere.")]
     public List<string>? ExcludeFiles { get; init; }
 
     // Default true per le cartelle (/MIR, come il migrator): elimina dalla destinazione ciò che non è nella sorgente.
+    [ConfigField("Mantiene la destinazione in mirroring; può eliminare gli elementi extra.", DefaultJson = "true")]
     public bool? Mirror { get; init; }
 
     // Default 16, solo per sorgenti cartella.
+    [ConfigField("Numero di thread (solo cartelle).", DefaultJson = "16", Minimum = 1, Maximum = 128)]
     public int? Threads { get; init; }
+    [ConfigField("Numero di tentativi in caso di errore.", DefaultJson = "1", Minimum = 0)]
     public int? Retries { get; init; }
+    [ConfigField("Secondi di attesa tra tentativi.", DefaultJson = "1", Minimum = 0)]
     public int? WaitSeconds { get; init; }
 
     // Sostituisce /COPYALL /B /DCOPY:DAT; stringa vuota per nessuna opzione di copia.
+    [ConfigField("Opzioni di copia Robocopy; stringa vuota rimuove le opzioni predefinite.", DefaultJson = "\"/COPYALL /B /DCOPY:DAT\"")]
     public string? CopyOptions { get; init; }
 
     // Aggiunto in coda, senza toccare i default.
+    [ConfigField("Opzioni Robocopy aggiuntive accodate ai default.", DefaultJson = "\"\"")]
     public string? ExtraArguments { get; init; }
 }
 
@@ -55,6 +66,8 @@ public sealed record RobocopyCommand(string Arguments, bool DeletesExtraFiles);
 /// <c>/XD</c> e <c>/XF</c> compaiono solo se configurati; <c>extraArguments</c> viene accodato in fondo.
 /// </remarks>
 
+[ActionMetadata("Copia file e cartelle con Robocopy, preservando metadati e applicando le opzioni configurate.")]
+[ActionConfig(typeof(RobocopyConfig))]
 public sealed partial class RobocopyAction(IProcessRunner processRunner) : IAction
 {
     private const int SummaryLines = 12;

@@ -11,17 +11,24 @@ namespace terraform.lib.engine.actions;
 /// È idempotente: una cartella già presente non viene toccata. I percorsi devono essere completi.
 /// Se uno dei percorsi esiste come file l'azione fallisce senza creare nulla.
 /// </remarks>
+[ActionMetadata("Crea cartelle configurate e relativi genitori; supporta la replica facoltativa delle sottocartelle.")]
+[ActionConfig(typeof(EnsureDirectoryAction.Config))]
 public sealed class EnsureDirectoryAction : IAction
 {
     private sealed class Config
     {
+        [ConfigField("Percorsi di destinazione da creare o replicare.", Required = true, ItemType = typeof(DirectorySpec), Variants = new[] { "string", "object" })]
         public List<JsonElement>? Paths { get; init; }
     }
 
     private sealed record DirectorySpec
     {
+        [ConfigField("Percorso di destinazione completo.", Required = true)]
         public string? Path { get; init; }
+        [ConfigField("Cartella sorgente da cui replicare le sottocartelle.", Widget = "path")]
+        [RequiredWhen(nameof(Depth), "0")]
         public string? Source { get; init; }
+        [ConfigField("Profondità di replica: -1 per tutto l'albero, 0 per il solo percorso, o un valore positivo.", DefaultJson = "0", Minimum = -1)]
         public int Depth { get; init; }
     }
 
